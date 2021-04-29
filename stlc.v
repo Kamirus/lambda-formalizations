@@ -1,13 +1,4 @@
 
-(* http://www.staff.city.ac.uk/~ross/papers/debruijn.html *)
-Inductive inc V :=
-| inc_0 : inc V
-| inc_S : V -> inc V
-.
-Hint Constructors inc : core.
-Arguments inc_0 {V}.
-Arguments inc_S {V}.
-
 Notation "^ f" := (option_map f) (at level 5, right associativity).
 Notation "^ X" := (option X) : type_scope.
 
@@ -48,7 +39,8 @@ Notation "S -> T" := (ty_arr S T) (in custom stlc at level 50, right associativi
 
 
 (* closed terms *)
-Definition term := tm False.
+Inductive Void : Type := .
+Definition term := tm Void.
 
 (* Several examples, the type `U` is irrelevant here *)
 Example tm_id U : term := do
@@ -66,10 +58,10 @@ Fail Example ex_tm_var : term := do
 Fail Example ex_tm_abs : term := do
   \ty_unit, 1.
 
-Lemma tm_var_is_not_closed : forall (t : term) V,
+(* Lemma tm_var_is_not_closed : forall (t : term) V,
   t = tm_var V ->
   False.
-Proof. intros. assumption. Qed.
+Proof. intros. assumption. Qed. *)
 
 
 (* Substitution *)
@@ -125,7 +117,7 @@ Proof. intros. unfold tm_Ω. apply redex. reflexivity. Qed.
 (* Typing relation *)
 
 Definition ctx V := V -> ty.
-Definition emp : ctx False := fun false => match false with end.
+Definition emp : ctx Void := fun no => match no with end.
 
 Definition ctx_cons {V : Type} (Gamma : ctx V) (t : ty) : ctx ^V :=
   fun V' =>
@@ -155,14 +147,41 @@ Lemma tm_id_typeable : forall (t:ty),
   emp |- {tm_id t} : (t -> t).
 Proof. unfold tm_id; auto. Qed.
 
-(* Lemma tm_ω_not_typeable : forall (t:ty),
+Require Import Coq.Program.Equality.
+
+Ltac inv H := dependent destruction H.
+
+Lemma typing_deterministic : forall V (Gamma : ctx V) e t1 t2,
+  Gamma |- e : t1 ->
+  Gamma |- e : t2 ->
+  t1 = t2.
+Proof.
+  intros V Gamma e.
+  dependent induction e; intros.
+  - inv H. inv H0. reflexivity.
+  - inv H. inv H1.
+    assert (do (A -> B) = do (A0 -> B0)). eapply IHe1; eassumption.
+    injection H1; auto.
+  - inv H. inv H0.
+    f_equal. eapply IHe; eassumption.
+Qed.
+
+Lemma ty_not_equi_recursive : forall A B, A = ty_arr A B -> False.
+Proof.
+  induction A; intros.
+  - discriminate H.
+  - injection H; intros; subst.
+    eapply IHA1. eassumption.
+  Qed.
+
+Lemma tm_ω_not_typeable : forall (t:ty),
   ~ exists T, emp |- {tm_ω t} : T.
 Proof.
   unfold tm_ω.
-  intros t [T H]. inversion H; subst. auto.
-
-  intro t. remember (tm_ω t) as Ho eqn:Heq. unfold tm_ω in *.
-  intros [T H]. inversion H; subst; auto.
-  
-  Qed. *)
+  intros t [T H].
+  dependent destruction H.
+  dependent destruction H.
+  assert (A = ty_arr A B) by (eapply typing_deterministic; eassumption).
+  apply ty_not_equi_recursive in H1. contradiction.
+  Qed.
 
