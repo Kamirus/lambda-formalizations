@@ -1,4 +1,8 @@
 
+Require Import Coq.Program.Equality.
+
+Ltac inv H := dependent destruction H.
+
 Notation "^ f" := (option_map f) (at level 5, right associativity).
 Notation "^ X" := (option X) : type_scope.
 
@@ -19,6 +23,7 @@ Arguments tm_app {V}.
 Arguments tm_abs {V}.
 
 Declare Custom Entry stlc.
+Notation "<{ e }>" := e (at level 100, e custom stlc at level 99).
 Notation "'do' e" := e (at level 100, e custom stlc at level 99).
 Notation "( x )" := x (in custom stlc, x at level 99).
 Notation "{ x }" := x (in custom stlc at level 0, x constr).
@@ -64,7 +69,14 @@ Fail Example ex_tm_abs : term := do
 Proof. intros. assumption. Qed. *)
 
 
+(* Value *)
+
+Inductive val : term -> Prop :=
+| val_abs : forall e t, val (do \t, e)
+.
+
 (* Substitution *)
+
 Fixpoint lift {V} (e : tm V) : tm ^V :=
   match e with
   | tm_var v => tm_var (Some v)
@@ -85,30 +97,32 @@ Fixpoint tm_subst {V} (e : tm ^V) (e' : tm V) : tm V :=
 
 
 (* Evaluation *)
+
 Reserved Notation "t1 '-->' t2" (at level 40).
-Inductive step {V} : tm V -> tm V -> Prop :=
-| ST_Redex : forall A e e',
+Inductive step : term -> term -> Prop :=
+| step_redex : forall A e e',
     do (\A, e) e' --> tm_subst e e'
-| ST_App1 : forall e1 e2 e,
+| step_app1 : forall e1 e2 e,
     e1 --> e2 ->
     do e1 e --> do e2 e
-| ST_App2 : forall e1 e2 e,
+| step_app2 : forall e1 e2 v,
+    val v ->
     e1 --> e2 ->
-    do e e1 --> do e e2
+    do v e1 --> do v e2
 where "t1 '-->' t2" := (step t1 t2).
 Hint Constructors step : core.
 (* Notation multistep := (multi step). *)
 (* Notation "t1 '-->*' t2" := (multistep t1 t2) (at level 40). *)
 
-Lemma redex : forall V (E : tm V) e e' A,
+Lemma redex : forall E e e' A,
   E = tm_subst e e' ->
   do (\A, e) e' --> E.
 Proof.
-  intros. subst. apply ST_Redex.
+  intros. subst. apply step_redex.
   Qed.
 
 Lemma tm_ω_value : forall t, ~ exists e, tm_ω t --> e.
-Proof. unfold tm_ω. intros t [e H]. inversion H. Qed.
+Proof. unfold tm_ω. intros t [e H]. inv H. Qed.
 
 Lemma tm_Ω_reduces_to_itself : forall t, tm_Ω t --> tm_Ω t.
 Proof. intros. unfold tm_Ω. apply redex. reflexivity. Qed.
@@ -147,10 +161,6 @@ Lemma tm_id_typeable : forall (t:ty),
   emp |- {tm_id t} : (t -> t).
 Proof. unfold tm_id; auto. Qed.
 
-Require Import Coq.Program.Equality.
-
-Ltac inv H := dependent destruction H.
-
 Lemma typing_deterministic : forall V (Gamma : ctx V) e t1 t2,
   Gamma |- e : t1 ->
   Gamma |- e : t2 ->
@@ -183,5 +193,86 @@ Proof.
   dependent destruction H.
   assert (A = ty_arr A B) by (eapply typing_deterministic; eassumption).
   apply ty_not_equi_recursive in H1. contradiction.
+  Qed.
+
+
+Lemma val_no_steps : forall (e : term),
+  val e ->
+  ~ exists e', e --> e'.
+Proof.
+  intros e Hval [e' H].
+  destruct Hval.
+  inversion H.
+  Qed.
+
+Lemma val_arr : forall v A B,
+  val v ->
+  emp |- v : (A -> B) ->
+  exists e', v = do \A, e'.
+Proof.
+  intros.
+  inv H0; try inv H.
+  exists e. reflexivity.
+  Qed.
+
+Theorem progress : forall e t,
+  emp |- e : t ->
+  val e \/ exists e', e --> e'.
+Proof.
+  intros e t H.
+  dependent induction H.
+  - contradiction.
+  - left. constructor.
+  - assert (val e1 \/ (exists e', e1 --> e')) by auto. clear IHhas_type1.
+    assert (val e2 \/ (exists e', e2 --> e')) by auto. clear IHhas_type2.
+    destruct H1.
+    + destruct H2.
+      * apply (val_arr _ A B) in H1 as [e' H1]; try assumption. subst.
+        right. eexists. econstructor.
+      * destruct H2; right; eexists; apply step_app2; eauto.
+    + destruct H1; right; eexists; apply step_app1; eauto.
+Qed.
+
+Require Import Coq.Logic.FunctionalExtensionality.
+
+Lemma exchange : forall V (Gamma : ctx V) A B,
+  (do Gamma, A, B) = (do Gamma, B, A).
+Proof.
+  intros. apply functional_extensionality. intros.
+  destruct x; simpl.
+Admitted.
+
+Lemma subst_preservation_1 : forall V (Gamma : ctx V) e A B,
+  Gamma, A |- e : B -> forall e',
+  Gamma |- e' : A ->
+  Gamma |- { tm_subst e e' } : B.
+Proof.
+  intros V Gamma e.
+  dependent induction e; intros A B He e' He'; inv He.
+  - admit.
+  - admit.
+  - simpl.
+Abort.
+
+Lemma subst_preservation_2 : forall V (Gamma : ctx V) e A B,
+  Gamma, A |- e : B -> forall e',
+  Gamma |- e' : A ->
+  Gamma |- { tm_subst e e' } : B.
+Proof.
+  intros V Gamma e A B He.
+  dependent induction He; intros e' He'.
+  - destruct x; simpl; auto.
+  - simpl. constructor.
+    eapply IHHe.
+Abort.
+
+Theorem preservation : forall e e' t,
+  emp |- e : t ->
+  e --> e' ->
+  emp |- e' : t.
+Proof.
+  intros e e' t He Hstep.
+  dependent induction Hstep.
+  - inv He. inv He1.
   Qed.
 
