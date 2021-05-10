@@ -378,13 +378,24 @@ destruct k; cbn in *.
   + apply None.
 Defined. *)
 
-Fixpoint prelift {V : Type} {m : nat}
-  (n k : nat) (t : tm' k (nopts m V)) {struct t} : tm' k (nopts n (nopts m V)) :=
+Fixpoint prelift {V : Type}
+  (m n k : nat) (t : tm' k (nopts m V)) {struct t} : tm' k (nopts n (nopts m V)) :=
   match t with
   | do var v => do var {prelift_var n k v}
-  | do e1 e2 => do {prelift n k e1} {prelift n k e2}
-  | do \t, e => do \t, {prelift n (S k) e}
+  | do e1 e2 => do {prelift m n k e1} {prelift m n k e2}
+  | do \t, e => do \t, {prelift m n (S k) e}
   end.
+
+Fixpoint predrop {V : Type}
+  (m n k : nat) (ctx : ctx' k (nopts n (nopts m V))) {struct k} : ctx' k (nopts m V).
+destruct k; cbn in *.
+- exact (drop n ctx).
+- intro v. destruct v.
+  + set (ctx_up := fun v => ctx (Some v)). apply predrop in ctx_up.
+    exact (ctx_up i).
+  + exact (ctx None). 
+Defined.
+
 
 (* Fixpoint prelift {V : Type} {m : nat}
   (n k : nat) (t : tm' (k + m) V) {struct t} : tm' (n + (k + m)) V.
@@ -415,10 +426,25 @@ Example prelift_ex1 : forall {V : Type},
   @prelift V 2 2 1 (do 0 1 2) = (do 0 3 4).
 Proof. reflexivity. Qed.
 
-Fixpoint prelift_ctx {V : Type} {m : nat}
-  (n k : nat) (ctx : ctx' (k + m) V) {struct t} : ctx' (n + (k + m)) V.
+Example prelift_ex2 : forall {V : Type} t,
+  @prelift V 2 2 1 (do 0 (\t, 0 1 2)) = (do 0 (\t, 0 1 4)).
+Proof. reflexivity. Qed.
 
-Record Tm V := buildT
+
+(* Example predrop_ex1 : forall {V : Type} t t' ctx,
+  ctx = <{ emp, t', t }> -> 
+  ctx |- 0 : t ->
+  @predrop V m n k ctx |- 0 : t *)
+
+
+(* Fixpoint prelift_ctx {V : Type} {m : nat}
+  (n k : nat) (ctx : ctx' (k + m) V) {struct k} : ctx' (n + (k + m)) V.
+destruct k; cbn in *.
+- destruct n; cbn in *.
+  + exact ctx.
+  + intro v. *)
+
+(* Record Tm V := buildT
   { _ctx: ctx V
   ; _term: tm V
   ; _type: ty
@@ -438,7 +464,7 @@ Definition Lift_n {V : Type} (n : nat) (M: Tm V):
   | _ctx N = liftedEnv n (_ctx M) k /\
     _term N = prelift_aux n (_term M) k /\
     _type N = _type M
-  }.
+  }. *)
 
 Lemma drop_S : forall V n (Gamma : ctx' n V) A,
   drop (S n) (Gamma, A) = drop n Gamma.
@@ -497,6 +523,25 @@ Proof.
 
 
 (* Weakening *)
+
+Lemma preweakening_var : forall V m k e n Gamma t v,
+  e = tm_var v ->
+  @predrop V m n k Gamma |- e : t ->
+  Gamma |- {prelift m n k e} : t.
+Proof with cbn in *.
+  intros. subst...
+
+Lemma preweakening : forall V m k e n Gamma t,
+  @predrop V m n k Gamma |- e : t ->
+  Gamma |- {prelift m n k e} : t.
+Proof with cbn in *.
+  dependent induction e; intros; inv H...
+  admit.
+  appauto IHe1 IHe2.
+  constructor.
+  assert (predrop m n (S k) (Gamma, t) |- e : B). admit.
+  apply IHe in H0; auto.
+Admitted.
 
 Definition simple_cast {T1 T2 : Type} (H : T1 = T2) (x : T1) : T2 :=
   eq_rect T1 (fun T3 : Type => T3) x T2 H.
