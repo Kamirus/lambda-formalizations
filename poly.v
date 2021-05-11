@@ -1,4 +1,4 @@
-(* Simply Typed Lambda Calculus formalization *)
+(* System F / Polymorphic Lambdas formalization *)
 
 (* Goal: Progress and Preservation *)
 
@@ -10,63 +10,108 @@ Ltac inv H := dependent destruction H.
 Notation "^ f" := (option_map f) (at level 5, right associativity) : function_scope.
 Notation "^ X" := (option X) : type_scope.
 
-Inductive ty :=
-| ty_unit : ty
-| ty_arr : ty -> ty -> ty
+Inductive ty (TV : Type) :=
+| ty_var : TV -> ty TV (* type variable *)
+| ty_arr : ty TV -> ty TV -> ty TV
+| ty_abs : ty ^TV -> ty TV (* type abstraction *)
 .
 Hint Constructors ty : core.
+Arguments ty_var {TV}.
+Arguments ty_arr {TV}.
+Arguments ty_abs {TV}.
 
-Inductive tm (V : Type) :=
-| tm_var : V -> tm V
-| tm_app : tm V -> tm V -> tm V
-| tm_abs : ty -> tm ^V -> tm V
+Inductive tm (TV V : Type) :=
+| tm_var : V -> tm TV V
+| tm_app : tm TV V -> tm TV V -> tm TV V
+| tm_abs : ty TV -> tm TV ^V -> tm TV V
+| tm_ty_abs : tm ^TV V -> tm TV V
+| tm_ty_app : tm ^TV V -> ty TV -> tm TV V
 .
 Hint Constructors tm : core.
-Arguments tm_var {V}.
-Arguments tm_app {V}.
-Arguments tm_abs {V}.
+Arguments tm_var {TV V}.
+Arguments tm_app {TV V}.
+Arguments tm_abs {TV V}.
+Arguments tm_ty_abs {TV V}.
+Arguments tm_ty_app {TV V}.
 
-Declare Custom Entry stlc.
-Notation "<{ e }>" := e (at level 100, e custom stlc at level 99).
-Notation "'do' e" := e (at level 100, e custom stlc at level 99).
-Notation "( x )" := x (in custom stlc, x at level 99).
-Notation "{ x }" := x (in custom stlc at level 0, x constr).
-Notation "x" := x (in custom stlc at level 0, x constr at level 0).
-Notation "0" := (tm_var None) (in custom stlc at level 0).
-Notation "1" := (tm_var (Some None)) (in custom stlc at level 0).
-Notation "2" := (tm_var (Some (Some None))) (in custom stlc at level 0).
-Notation "3" := (tm_var (Some (Some (Some None)))) (in custom stlc at level 0).
-Notation "4" := (tm_var (Some (Some (Some (Some None))))) (in custom stlc at level 0).
-(* Notation "'S' .. 'S' x" := (tm_var (inc_S .. (inc_S x) ..)) (in custom stlc at level 0). *)
-Notation "'var' V" := (tm_var V) (in custom stlc at level 1, left associativity).
-Notation "x y" := (tm_app x y) (in custom stlc at level 1, left associativity).
+Declare Custom Entry tm_scope.
+Declare Custom Entry ty_scope.
+Notation "<{ e }>" := e (at level 100, e custom tm_scope at level 99).
+Notation "'do' e" := e (at level 100, e custom tm_scope at level 99).
+Notation "( x )" := x (in custom tm_scope, x at level 99).
+Notation "{ x }" := x (in custom tm_scope at level 0, x constr).
+Notation "x" := x (in custom tm_scope at level 0, x constr at level 0).
+Notation "0" := (tm_var None) (in custom tm_scope at level 0).
+Notation "1" := (tm_var (Some None)) (in custom tm_scope at level 0).
+Notation "2" := (tm_var (Some (Some None))) (in custom tm_scope at level 0).
+Notation "3" := (tm_var (Some (Some (Some None)))) (in custom tm_scope at level 0).
+Notation "4" := (tm_var (Some (Some (Some (Some None))))) (in custom tm_scope at level 0).
+(* Notation "'S' .. 'S' x" := (tm_var (inc_S .. (inc_S x) ..)) (in custom tm_scope at level 0). *)
+Notation "'var' V" := (tm_var V) (in custom tm_scope at level 1, left associativity).
+Notation "x y" := (tm_app x y) (in custom tm_scope at level 1, left associativity).
+Notation "e < t >" := (tm_ty_app e t)
+  (in custom tm_scope at level 1,
+    e custom tm_scope,
+    t custom ty_scope,
+    left associativity).
 Notation "\ t , e" :=
-  (tm_abs t e) (in custom stlc at level 90,
-                 t custom stlc at level 99,
-                 e custom stlc at level 99,
+  (tm_abs t e) (in custom tm_scope at level 90,
+                 t custom ty_scope at level 99,
+                 e custom tm_scope at level 99,
                  left associativity).
+Notation "/\ e" := (tm_ty_abs e)
+  (in custom tm_scope at level 95,
+    e custom tm_scope at level 99,
+    left associativity).
 (* Coercion tm_var : V >-> tm V. *)
-Notation "S -> T" := (ty_arr S T) (in custom stlc at level 50, right associativity).
+Notation "x" := x (in custom ty_scope at level 0, x constr at level 0).
+Notation "( x )" := x (in custom ty_scope, x at level 99).
+Notation "<[ t ]>" := t (at level 100, t custom ty_scope at level 99).
+Notation "'Forall' t" := (ty_abs t)
+  (in custom ty_scope at level 90,
+    right associativity).
+Notation "S -> T" := (ty_arr S T)
+  (in custom ty_scope at level 50,
+    right associativity).
+Notation "'a0'" := (ty_var None) (in custom ty_scope at level 0).
+Notation "'a1'" := (ty_var (Some None)) (in custom ty_scope at level 0).
+Notation "'a2'" := (ty_var (Some (Some None))) (in custom ty_scope at level 0).
+Notation "'a3'" := (ty_var (Some (Some (Some None)))) (in custom ty_scope at level 0).
+Notation "'a4'" := (ty_var (Some (Some (Some (Some None))))) (in custom ty_scope at level 0).
 
 
 (* Closed terms *)
 
 Inductive Void : Type := .
-Definition term := tm Void.
+Definition term := tm Void Void.
+Definition type := ty Void.
 
-(* Several examples, the type `U` is irrelevant here *)
-Example tm_id U : term := do
+(* Several examples *)
+
+Example ty_unit : type :=
+  <[ Forall a0 -> a0 ]>.
+
+Example tm_id_mono U : term := do
   \U, 0. (* \x: U, x *)
 Example tm_ω  U : term := do
   \U, 0 0. (* \x: U, x x *)
 Example tm_Ω  U : term := do
   (\U, 0 0) (\U, 0 0).
+Example tm_id : term := do
+  /\ \a0, 0.
+Example tm_bool_true : term := do
+  /\ \a0, \a0, 1.
+Example tm_bool_false : term := do
+  /\ \a0, \a0, 0.
+
 
 (* Attempt to create open terms *)
 Fail Example ex_tm_var : term := do
   0.
 Fail Example ex_tm_abs : term := do
   \ty_unit, 1.
+Fail Example ex_tm_ty : term := do
+  \a0, 0.
 
 
 (* Value *)
@@ -79,20 +124,22 @@ Inductive val : term -> Prop :=
 Require Import Coq.funind.Recdef.
 Notation nopts n T := (iter _ n option T).
 
-Notation tm' n V := (tm (nopts n V)).
-Notation term' n := (tm' n Void).
+Notation tm' i TV n V := (tm (nopts i TV) (nopts n V)).
+Notation ty' i TV := (ty (nopts i TV)).
+Notation term' i n := (tm' i Void n Void).
+Notation type' i := (ty' i Void).
 
-Definition ctx V := V -> ty.
-Notation ctx' n V := (ctx (nopts n V)).
-Definition emp : ctx Void := fun no => match no with end.
+Definition ctx TV V := V -> ty TV.
+Notation ctx' i TV n V := (ctx (nopts i TV) (nopts n V)).
+Definition emp : ctx Void Void := fun no => match no with end.
 
-Definition ctx_cons {V : Type} (Gamma : ctx V) (t : ty) : ctx ^V :=
+Definition ctx_cons {V TV : Type} (Gamma : ctx TV V) (t : ty TV) : ctx TV ^V :=
   fun V' =>
     match V' with
     | None => t
     | Some V => Gamma V
     end.
-Notation "Gamma , t" := (ctx_cons Gamma t) (at level 100, t custom stlc at level 0).
+Notation "Gamma , t" := (ctx_cons Gamma t) (at level 100, t custom ty_scope at level 0).
 
 
 (* Lift *)
@@ -216,7 +263,7 @@ Proof. intros. unfold tm_Ω. apply redex. reflexivity. Qed.
 (* Typing relation *)
 
 Reserved Notation "Gamma '|-' t ':' T"
-  (at level 101, t custom stlc, T custom stlc at level 0).
+  (at level 101, t custom tm_scope, T custom tm_scope at level 0).
 Inductive has_type : forall {V}, ctx V -> tm V -> ty -> Prop :=
 | var_has_type : forall {V} Gamma (x : V) t,
     Gamma x = t ->
