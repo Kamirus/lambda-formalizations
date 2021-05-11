@@ -45,21 +45,20 @@ Notation "\ t , e" :=
 Notation "S -> T" := (ty_arr S T) (in custom stlc at level 50, right associativity).
 
 
-(* closed terms *)
+(* Closed terms *)
+
 Inductive Void : Type := .
 Definition term := tm Void.
 
 (* Several examples, the type `U` is irrelevant here *)
 Example tm_id U : term := do
-  \U, 0.
+  \U, 0. (* \x: U, x *)
 Example tm_ω  U : term := do
-  \U, 0 0.
-Print tm_ω.
+  \U, 0 0. (* \x: U, x x *)
 Example tm_Ω  U : term := do
   (\U, 0 0) (\U, 0 0).
-Print tm_Ω.
 
-(* attempt to create open terms *)
+(* Attempt to create open terms *)
 Fail Example ex_tm_var : term := do
   0.
 Fail Example ex_tm_abs : term := do
