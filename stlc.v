@@ -545,6 +545,15 @@ Proof with cbn in *.
     - inv H. auto.
 Qed.
 
+Lemma predrop_cons : forall V m n k Gamma t e B,
+  @predrop V m n    k   Gamma, t  |- e : B ->
+  @predrop V m n (S k) (Gamma, t) |- e : B.
+Proof.
+  intros.
+  dependent induction H; auto.
+  appauto IHhas_type1 IHhas_type2.
+  Qed.
+
 Lemma preweakening : forall V m k e n Gamma t,
   @predrop V m n k Gamma |- e : t ->
   Gamma |- {prelift m n k e} : t.
@@ -553,9 +562,8 @@ Proof with cbn in *.
   - apply preweakening_var. auto.
   - appauto IHe1 IHe2.
   - constructor.
-    assert (predrop m n (S k) (Gamma, t) |- e : B).
-    + clear IHe. dependent induction H; auto. appauto IHhas_type1 IHhas_type2.
-    + apply IHe in H0; auto.
+    apply predrop_cons in H.
+    apply IHe in H; auto.
 Qed.
 
 
