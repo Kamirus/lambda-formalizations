@@ -524,24 +524,41 @@ Proof.
 
 (* Weakening *)
 
-Lemma preweakening_var : forall V m k e n Gamma t v,
-  e = tm_var v ->
-  @predrop V m n k Gamma |- e : t ->
-  Gamma |- {prelift m n k e} : t.
+Lemma preweakening_var : forall V m k n Gamma t v,
+  @predrop V m n k Gamma |- var v : t ->
+  Gamma |- var {prelift_var n k v} : t.
 Proof with cbn in *.
   intros. subst...
+  induction k...
+  + induction n; auto...
+    constructor.
+    apply IHn in H.
+    inv H. reflexivity.
+  + destruct v.
+    - constructor.
+      set (G := fun v => Gamma (Some v)).
+      specialize IHk with (Gamma := G) (v := i).
+      cut (G |- var {prelift_var n k i} : t).
+      * intros H0. inv H0. reflexivity.
+      * apply IHk. clear IHk. subst G.
+        inv H. auto.
+    - inv H. auto.
+Qed.
 
 Lemma preweakening : forall V m k e n Gamma t,
   @predrop V m n k Gamma |- e : t ->
   Gamma |- {prelift m n k e} : t.
 Proof with cbn in *.
   dependent induction e; intros; inv H...
-  admit.
-  appauto IHe1 IHe2.
-  constructor.
-  assert (predrop m n (S k) (Gamma, t) |- e : B). admit.
-  apply IHe in H0; auto.
-Admitted.
+  - apply preweakening_var. auto.
+  - appauto IHe1 IHe2.
+  - constructor.
+    assert (predrop m n (S k) (Gamma, t) |- e : B).
+    + clear IHe. dependent induction H; auto. appauto IHhas_type1 IHhas_type2.
+    + apply IHe in H0; auto.
+Qed.
+
+
 
 Definition simple_cast {T1 T2 : Type} (H : T1 = T2) (x : T1) : T2 :=
   eq_rect T1 (fun T3 : Type => T3) x T2 H.
