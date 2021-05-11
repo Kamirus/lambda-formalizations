@@ -88,14 +88,72 @@ Notation nopts n T := (iter _ n option T).
 Notation tm' n V := (tm (nopts n V)).
 Notation term' n := (tm' n Void).
 
-Fixpoint tmap {V1 V2 : Type} (f : V1 -> V2) (e : tm V1) : tm V2 :=
+
+Definition ctx V := V -> ty.
+Notation ctx' n V := (ctx (nopts n V)).
+Definition emp : ctx Void := fun no => match no with end.
+
+Definition ctx_cons {V : Type} (Gamma : ctx V) (t : ty) : ctx ^V :=
+  fun V' =>
+    match V' with
+    | None => t
+    | Some V => Gamma V
+    end.
+Notation "Gamma , t" := (ctx_cons Gamma t) (at level 100, t custom stlc at level 0).
+
+
+(* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.447.5355&rep=rep1&type=pdf *)
+(* leave variables less than [k] untouched and remaining ones increase by [n] *)
+Fixpoint lift_var_n {V : Type} (n : nat) : V -> nopts n V :=
+  match n with
+  | 0 => fun v => v
+  | S n => fun v => Some (lift_var_n n v)
+  end.
+
+Fixpoint prelift_var {V : Type} { m : nat }
+  (n k : nat) (v : nopts k (nopts m V)) {struct k} : nopts k (nopts n (nopts m V)).
+destruct k.
+- exact (lift_var_n n v).
+- destruct v.
+  + exact (Some (prelift_var _ _ _ _ i)).
+  + exact None.
+Defined.
+
+Fixpoint prelift {V : Type}
+  (m n k : nat) (t : tm' k (nopts m V)) {struct t} : tm' k (nopts n (nopts m V)) :=
+  match t with
+  | do var v => do var {prelift_var n k v}
+  | do e1 e2 => do {prelift m n k e1} {prelift m n k e2}
+  | do \t, e => do \t, {prelift m n (S k) e}
+  end.
+
+
+Fixpoint drop {V : Type} (n : nat) : ctx' n V -> ctx V :=
+  match n with
+  | 0 => fun (ctx : ctx V) => ctx
+  | S n => fun (ctx : ctx' (S n) V) => drop n (fun v => ctx (Some v))
+  end.
+
+Fixpoint predrop {V : Type}
+  (m n k : nat) (ctx : ctx' k (nopts n (nopts m V))) {struct k} : ctx' k (nopts m V).
+destruct k; cbn in *.
+- exact (drop n ctx).
+- intro v. destruct v.
+  + set (ctx_up := fun v => ctx (Some v)). apply predrop in ctx_up.
+    exact (ctx_up i).
+  + exact (ctx None). 
+Defined.
+
+
+(* Fixpoint tmap {V1 V2 : Type} (f : V1 -> V2) (e : tm V1) : tm V2 :=
   match e with
   | tm_var x => tm_var (f x)
   | tm_app e1 e2 => tm_app (tmap f e1) (tmap f e2)
   | tm_abs ty e => tm_abs ty (tmap ^f e)
   end.
 
-Definition lift {V} (e : tm V) : tm ^V := tmap Some e.
+Definition lift {V} (e : tm V) : tm ^V := tmap Some e. *)
+Definition lift {V} e := (@prelift V 0 1 0 e).
 
 Fixpoint tm_subst_var
   {V : Type} (n : nat) (e : tm V) : nopts (S n) V -> tm' n V :=
@@ -190,18 +248,8 @@ Lemma tm_Ω_reduces_to_itself : forall t, tm_Ω t --> tm_Ω t.
 Proof. intros. unfold tm_Ω. apply redex. reflexivity. Qed.
 
 
+
 (* Typing relation *)
-
-Definition ctx V := V -> ty.
-Definition emp : ctx Void := fun no => match no with end.
-
-Definition ctx_cons {V : Type} (Gamma : ctx V) (t : ty) : ctx ^V :=
-  fun V' =>
-    match V' with
-    | None => t
-    | Some V => Gamma V
-    end.
-Notation "Gamma , t" := (ctx_cons Gamma t) (at level 100, t custom stlc at level 0).
 
 Reserved Notation "Gamma '|-' t ':' T"
   (at level 101, t custom stlc, T custom stlc at level 0).
@@ -297,8 +345,6 @@ Qed.
 
 (* Preservation *)
 
-Notation ctx' n V := (ctx (nopts n V)).
-
 Fixpoint ctx_rm
   {V : Type} (n : nat) : ctx' (S n) V -> ctx' n V :=
   match n with
@@ -333,11 +379,6 @@ Example rm_1 : forall V (Gamma : ctx V) A B,
   ctx_rm 1 (Gamma, A, B) = (Gamma, B).
 Proof. reflexivity. Qed.
 
-Fixpoint drop {V : Type} (n : nat) : ctx' n V -> ctx V :=
-  match n with
-  | 0 => fun (ctx : ctx V) => ctx
-  | S n => fun (ctx : ctx' (S n) V) => drop n (fun v => ctx (Some v))
-  end.
 
 Fixpoint lift_n {V : Type} (n : nat) : tm V -> tm' n V :=
   match n with
@@ -345,56 +386,7 @@ Fixpoint lift_n {V : Type} (n : nat) : tm V -> tm' n V :=
   | S n => fun e => lift (lift_n n e)
   end.
 
-Fixpoint lift_var_n {V : Type} (n : nat) : V -> nopts n V :=
-  match n with
-  | 0 => fun v => v
-  | S n => fun v => Some (lift_var_n n v)
-  end.
 
-(* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.447.5355&rep=rep1&type=pdf *)
-(* leave variables less than [k] untouched and remaining ones increase by [n] *)
-Fixpoint prelift_var {V : Type} { m : nat }
-  (n k : nat) (v : nopts k (nopts m V)) {struct k} : nopts k (nopts n (nopts m V)).
-destruct k.
-- exact (lift_var_n n v).
-- destruct v.
-  + exact (Some (prelift_var _ _ _ _ i)).
-  + exact None.
-Defined.
-
-(* Fixpoint prelift_var {V : Type} { m : nat }
-  (n k : nat) (v : nopts (k + m) V) {struct k} : nopts (n + (k + m)) V.
-destruct k; cbn in *.
-- apply (lift_var_n n) in v.
-  induction n; cbn in *.
-  + apply v.
-  + destruct v.
-    apply IHn in i. apply Some. apply i.
-    apply None.
--  cut ((n + S (k + m)) = S (n + (k + m))); intros; try lia; rewrite H; clear H.
-  cbn; destruct v.
-  + apply prelift_var with (n := n) in i.
-    apply (Some i).
-  + apply None.
-Defined. *)
-
-Fixpoint prelift {V : Type}
-  (m n k : nat) (t : tm' k (nopts m V)) {struct t} : tm' k (nopts n (nopts m V)) :=
-  match t with
-  | do var v => do var {prelift_var n k v}
-  | do e1 e2 => do {prelift m n k e1} {prelift m n k e2}
-  | do \t, e => do \t, {prelift m n (S k) e}
-  end.
-
-Fixpoint predrop {V : Type}
-  (m n k : nat) (ctx : ctx' k (nopts n (nopts m V))) {struct k} : ctx' k (nopts m V).
-destruct k; cbn in *.
-- exact (drop n ctx).
-- intro v. destruct v.
-  + set (ctx_up := fun v => ctx (Some v)). apply predrop in ctx_up.
-    exact (ctx_up i).
-  + exact (ctx None). 
-Defined.
 
 
 (* Fixpoint prelift {V : Type} {m : nat}
@@ -543,7 +535,7 @@ Proof with cbn in *.
       * apply IHk. clear IHk. subst G.
         inv H. auto.
     - inv H. auto.
-Qed.
+  Qed.
 
 Lemma predrop_cons : forall V m n k Gamma t e B,
   @predrop V m n    k   Gamma, t  |- e : B ->
@@ -564,107 +556,67 @@ Proof with cbn in *.
   - constructor.
     apply predrop_cons in H.
     apply IHe in H; auto.
-Qed.
-
-
-
-Definition simple_cast {T1 T2 : Type} (H : T1 = T2) (x : T1) : T2 :=
-  eq_rect T1 (fun T3 : Type => T3) x T2 H.
-
-(* Fixpoint coerce :
-  JMeq *)
-
-
-Lemma weakening_n : forall V n (e : tm V) Gamma t,
-  drop n Gamma |- e : t ->
-  Gamma |- {lift_n n e} : t.
-Proof with cbn in *.
-  induction e; intros; inv H.
-  - eapply weakening_var_n; eauto.
-  - assert (lift_n n (do e1 e2) = do {lift_n n e1} {lift_n n e2}). admit.
-    rewrite H1.
-    appauto IHe1 IHe2.
-  - 
-    (* remember (lift_n n e).
-    assert ((iter Type n option (option V)) = option (iter Type n option V)). admit.
-    rewrite H0 in t0. *)
-    (* assert ((lift_n n (do \t, e)) = do \t, {lift_n n e}). *)
-  
-    induction n. cbn in *; auto.
-
-    assert (iter Type (S n) option V = option (iter Type n option V)). admit.
-    (* cbn in Gamma. *)
-    replace (iter Type (S n) option V) with (option (iter Type n option V)).
-
-    cbn in *.
-    assert (tm' n ^V = tm ^ (nopts n V)). admit.
-    assert (lift (lift_n n (do \ t, e)) ~= lift_n n (lift (do \ t, e))). admit.
-    subst H1.
-    remember (simple_cast H0 (lift_n n (lift (do \ t, e)))) as lam.
-    unfold simple_cast in Heqlam.
-    apply (simple_cast H0) in Heqlam.
-    
-    (* rewrite <- H0 in *. *)
-    remember (lift_n n (lift (do \ t, e))). dependent rewrite -> H0 in t0. subst.
-    dependent rewrite -> H1. JMeq
-  
-      induction n; cbn in *.
-    + appauto H H0.
-    + cbn.
-
-  - intros. cbn in Gamma.
-    remember (ctx_inv _ Gamma); clear Heqe0; destruct e0 as [G [A Heq]]; subst.
-    apply IHn in H...
-    rewrite drop_S in H. apply IHn in H.
-
-  induction n, e; auto; intros.
-  - inv H...
-  - intros... auto.
-  - intros... 
   Qed.
 
-Lemma remove_lift : forall V (e : tm V) Gamma A t,
-  Gamma, A |- {lift e} : t ->
-  Gamma    |-       e  : t.
+Lemma weakening : forall V e Gamma t,
+  @predrop V 0 1 0 Gamma |- e : t ->
+  Gamma |- {lift e} : t.
 Proof with cbn in *.
-  dependent induction e; intros; cbn in *; inv H.
-  - auto.
-  - econstructor.
-    eapply IHe1; eauto.
-    eapply IHe2; eauto.
+  intros.
+  assert (lift e = prelift 0 1 0 e) by auto.
+  rewrite H0. clear H0.
+  apply preweakening. auto.
+  Qed.
+
+
+(* Substitution Lemma *)
+
+Lemma substitution_lemma : forall n e Gamma e' t,
+  Gamma |- e : t ->
+  emp |- e' : {ctx_nth n Gamma} ->
+  ctx_rm n Gamma |- {tm_subst_n n e e'} : t.
+Proof with cbn in *.
+  intros. dependent induction e...
   - inv H.
-  
-    inv e. cbn in *.
-    + constructor.
-      destruct v...
-      * apply IHe in H. constructor. inv H... reflexivity.
-      * inv H. auto.
-    + constructor.
-      inv H. econstructor. apply IHe.
-    + constructor. inv e; 
-    apply IHe in H.
+    induction n... 
+    + destruct v. contradiction.
+      assert ((fun v : Void => Gamma (Some v)) = emp)
+        by (apply functional_extensionality; intros; contradiction).
+      rewrite H. assumption.
+    + destruct v.
+      * apply IHn with (v := o) in H0.
+        clear IHn.
+        apply weakening. cbn. auto.
+      * apply IHn with (v := None) in H0.
+        auto.
+  - inv H. appauto IHe1 IHe2.
+  - inv H. constructor.
+    cut (ctx_rm (S n) (Gamma, t) |- {tm_subst_n (S n) e e'} : B).
+    + intro... inv H1; rewrite <- x; auto. appauto H1_ H1_0.
+    + apply IHe; auto.
   Qed.
 
-Lemma weakening : forall V (e : tm V) Gamma A t,
-  Gamma    |-       e  : t ->
-  Gamma, A |- {lift e} : t.
-Proof with cbn in *.
-  dependent induction e; intros; cbn in *; inv H.
-  - auto.
-  - econstructor.
-    eapply IHe1; eauto.
-    eapply IHe2; eauto.
-  - inv e...
-    + constructor. destruct v...
-      * inv H... constructor... reflexivity.
-      * inv H. auto.
-    + 
-  
-    econstructor.
-    eapply IHe in H.
-    eapply IHe.
+
+Theorem preservation : forall e e',
+  e --> e' -> forall t,
+  emp |- e : t ->
+  emp |- e' : t.
+Proof.
+  intros e e' Hstep.
+  dependent induction Hstep; intros t He.
+  - inv He. inv He1. fold emp in *.
+    unfold tm_subst.
+    set (H := substitution_lemma 0 e (emp, A0) e' B).
+    apply H in He1; auto.
+  - inv He. fold emp in *.
+    apply IHHstep in He1.
+    econstructor; eauto.
+  - inv He. fold emp in *.
+    apply IHHstep in He2.
+    econstructor; eauto.
   Qed.
 
+(* 
 Fixpoint optionn n (X : Type) : Type :=
   match n with
   | 0 => X
@@ -675,7 +627,7 @@ Fixpoint liftn n (t : term) : tm (optionn n Void) :=
   match n with
   | 0 => t
   | S n => lift (liftn n t)
-  end.
+  end. *)
 
 (* Inductive hole : forall {V}, ctx ^V -> ctx V -> ty -> tm V -> term -> Prop :=
 | hole_0 : forall A e,
