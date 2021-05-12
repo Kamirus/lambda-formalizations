@@ -396,6 +396,13 @@ Fixpoint ctx_rm
       end
   end.
 
+Fixpoint ctx_skip
+  {V : Type} (n : nat) : ctx' n V -> ctx V :=
+  match n with
+  | 0   => fun G => G
+  | S n => fun G => ctx_skip n (fun v => G (Some v))
+  end.
+
 Fixpoint ctx_nth
   {V : Type} (n : nat) : ctx' (S n) V -> ty :=
   match n with
@@ -412,24 +419,19 @@ Example rm_1 : forall V (Gamma : ctx V) A B,
 Proof. reflexivity. Qed.
 
 
-Lemma substitution_lemma : forall n e Gamma e' t,
+Lemma substitution_lemma : forall V n e Gamma e' t,
   Gamma |- e : t ->
-  emp |- e' : {ctx_nth n Gamma} ->
-  ctx_rm n Gamma |- {tm_subst_n n e e'} : t.
+  ctx_skip (S n) Gamma |- e' : {ctx_nth n Gamma} ->
+  ctx_rm n Gamma |- {@tm_subst_n V n e e'} : t.
 Proof with cbn in *.
   intros. dependent induction e...
   - inv H.
     induction n... 
-    + destruct v. contradiction.
-      assert ((fun v : Void => Gamma (Some v)) = emp)
-        by (apply functional_extensionality; intros; contradiction).
-      rewrite H. assumption.
+    + destruct v; auto.
     + destruct v.
-      * apply IHn with (v := o) in H0.
-        clear IHn.
-        apply weakening. cbn. auto.
-      * apply IHn with (v := None) in H0.
-        auto.
+      * apply weakening. cbn.
+        apply IHn. assumption.
+      * constructor. reflexivity.
   - inv H. appauto IHe1 IHe2.
   - inv H. constructor.
     cut (ctx_rm (S n) (Gamma, t) |- {tm_subst_n (S n) e e'} : B).
@@ -446,13 +448,22 @@ Theorem preservation : forall e e',
   emp |- e' : t.
 Proof.
   intros e e' Hstep.
-  dependent induction Hstep; intros t He; inv He; fold emp in *.
+  induction Hstep; intros t He; inv He; fold emp in *.
   - inv He1. fold emp in *.
     unfold tm_subst.
-    set (H := substitution_lemma 0 e (emp, A0) e' B).
+    set (H := substitution_lemma Void 0 e (emp, A0) e' B).
     apply H in He1; auto.
   - apply IHHstep in He1.
     econstructor; eauto.
   - apply IHHstep in He2.
     econstructor; eauto.
   Qed.
+
+
+(* For this we need to alter normalization relation -
+   for now only closed terms can reduce *)
+Theorem open_preservation : forall e e',
+  e --> e' -> forall Gamma t,
+  Gamma |- e : t ->
+  Gamma |- e' : t.
+Admitted.
