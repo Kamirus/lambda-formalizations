@@ -25,7 +25,7 @@ Inductive tm (TV V : Type) :=
 | tm_app : tm TV V -> tm TV V -> tm TV V
 | tm_abs : ty TV -> tm TV ^V -> tm TV V
 | tm_ty_abs : tm ^TV V -> tm TV V
-| tm_ty_app : tm ^TV V -> ty TV -> tm TV V
+| tm_ty_app : tm TV V -> ty TV -> tm TV V
 .
 Hint Constructors tm : core.
 Arguments tm_var {TV V}.
@@ -99,6 +99,8 @@ Example tm_Ω  U : term := do
   (\U, 0 0) (\U, 0 0).
 Example tm_id : term := do
   /\ \a0, 0.
+Example tm_id_mono2 U : term := do
+  tm_id <U>.
 Example tm_bool_true : term := do
   /\ \a0, \a0, 1.
 Example tm_bool_false : term := do
@@ -162,23 +164,31 @@ destruct k.
   + exact None.
 Defined.
 
-Fixpoint prelift {V : Type}
-  (m n k : nat) (t : tm' k (nopts m V)) {struct t} : tm' k (nopts n (nopts m V)) :=
+Fixpoint tm_prelift {TV V : Type}
+  (i m n k : nat) (t : tm' i TV k (nopts m V)) {struct t}
+  : tm' i TV k (nopts n (nopts m V)) :=
   match t with
   | do var v => do var {prelift_var n k v}
-  | do e1 e2 => do {prelift m n k e1} {prelift m n k e2}
-  | do \t, e => do \t, {prelift m n (S k) e}
+  | do e1 e2 => do {tm_prelift i m n k e1} {tm_prelift i m n k e2}
+  | do \t, e => do \t, {tm_prelift i m n (S k) e}
+  | do /\  e => do /\ {tm_prelift (S i) m n k e}
+  | do e <t> => do {tm_prelift i m n k e} <t>
   end.
 
-Example prelift_ex1 : forall {V : Type},
-@prelift V 2 2 1 (do 0 1 2) = (do 0 3 4).
+Example prelift_ex1 : forall {TV V : Type},
+@tm_prelift TV V 0 2 2 1 (do 0 1 2) = (do 0 3 4).
 Proof. reflexivity. Qed.
 
-Example prelift_ex2 : forall {V : Type} t,
-@prelift V 2 2 1 (do 0 (\t, 0 1 2)) = (do 0 (\t, 0 1 4)).
+Example prelift_ex2 : forall {TV V : Type} t,
+@tm_prelift TV V 0 2 2 1 (do 0 (\t, 0 1 2)) = (do 0 (\t, 0 1 4)).
 Proof. reflexivity. Qed.
 
-Notation lift e := (prelift 0 1 0 e).
+Example prelift_ex3 : forall {TV V : Type} t,
+@tm_prelift TV V 0 2 2 1
+  (do (/\ \a0, 0 1 2) <t>) = (do (/\ \a0, 0 1 4) <t>).
+Proof. reflexivity. Qed.
+
+Notation lift e := (tm_prelift 0 0 1 0 e).
 
 
 (* Substitution *)
