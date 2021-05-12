@@ -1,4 +1,4 @@
-(* Simply Typed Lambda Calculus formalization *)
+(* Formalization of the Simply Typed Lambda Calculus using nested datatypes *)
 
 (* Goal: Progress and Preservation *)
 
@@ -460,10 +460,45 @@ Proof.
   Qed.
 
 
+(* Full normalization *)
+
+(* Inductive val' : forall {V}, tm V -> Prop :=
+| val'_var : forall V v, @val' V (do var v)
+| val'_app : forall V v e,
+  foldr
+| val'_abs : forall V e t,
+    val' e ->
+    @val' V (do \t, e)
+.
+Hint Constructors val' : core. *)
+
+Reserved Notation "t1 '-->n' t2" (at level 40).
+Inductive norm : forall {V}, tm V -> tm V -> Prop :=
+| norm_redex : forall V A e e',
+    do (\A, e) e' -->n @tm_subst V e e'
+| norm_app1 : forall V (e1 e2 e : tm V),
+    e1 -->n e2 ->
+    do e1 e -->n do e2 e
+| norm_app2 : forall V (e1 e2 e : tm V),
+    e1 -->n e2 ->
+    do e e1 -->n do e e2
+| norm_abs : forall V t (e1 e2 : tm ^V),
+    e1 -->n e2 ->
+    do \t, e1 -->n do \t, e2
+where "t1 '-->n' t2" := (norm t1 t2).
+Hint Constructors norm : core.
+
 (* For this we need to alter normalization relation -
    for now only closed terms can reduce *)
-Theorem open_preservation : forall e e',
-  e --> e' -> forall Gamma t,
+Theorem open_preservation : forall V (e e' : tm V),
+  e -->n e' -> forall Gamma t,
   Gamma |- e : t ->
   Gamma |- e' : t.
-Admitted.
+Proof.
+  intros V e e' Hstep.
+  induction Hstep; intros Gamma t0 He; inv He; try (econstructor; eauto).
+  - inv He1.
+    unfold tm_subst.
+    set (H := substitution_lemma _ 0 e (Gamma, A0) e' B).
+    apply H in He1; auto.
+  Qed.
