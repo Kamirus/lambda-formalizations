@@ -293,7 +293,7 @@ Theorem progress : forall e t,
   val e \/ exists e', e --> e'.
 Proof.
   intros e t H.
-  dependent induction H.
+  dependent induction H. (* it requires dependent induction *)
   - contradiction.
   - left. constructor.
   - assert (val e1 \/ (exists e', e1 --> e')) by auto. clear IHhas_type1.
@@ -306,14 +306,6 @@ Proof.
     + destruct H1; right; eexists; apply step_app1; eauto.
 Qed.
 
-
-
-(* solve app case by simple inductive reasoning *)
-Ltac appauto IHe1 IHe2 :=
-  econstructor;
-  [ eapply IHe1; eauto
-  | eapply IHe2; eauto
-  ].
 
 (* Weakening *)
 
@@ -358,9 +350,7 @@ Lemma predrop_cons : forall V m n k Gamma t e B,
   @predrop V m n    k   Gamma, t  |- e : B ->
   @predrop V m n (S k) (Gamma, t) |- e : B.
 Proof.
-  intros.
-  dependent induction H; auto.
-  appauto IHhas_type1 IHhas_type2.
+  intros. induction H; eauto.
   Qed.
 
 Lemma preweakening : forall V m k e n Gamma t,
@@ -369,7 +359,7 @@ Lemma preweakening : forall V m k e n Gamma t,
 Proof with cbn in *.
   dependent induction e; intros; inv H...
   - apply preweakening_var. auto.
-  - appauto IHe1 IHe2.
+  - eauto.
   - constructor.
     apply predrop_cons in H.
     apply IHe in H; auto.
@@ -424,18 +414,17 @@ Lemma substitution_lemma : forall V n e Gamma e' t,
   ctx_skip (S n) Gamma |- e' : {ctx_nth n Gamma} ->
   ctx_rm n Gamma |- {@tm_subst_n V n e e'} : t.
 Proof with cbn in *.
-  intros. dependent induction e...
-  - inv H.
-    induction n... 
+  intros. dependent induction e; inv H...
+  - induction n... 
     + destruct v; auto.
     + destruct v.
       * apply weakening. cbn.
         apply IHn. assumption.
       * constructor. reflexivity.
-  - inv H. appauto IHe1 IHe2.
-  - inv H. constructor.
+  - eauto.
+  - constructor.
     cut (ctx_rm (S n) (Gamma, t) |- {tm_subst_n (S n) e e'} : B).
-    + intro... inv H1; rewrite <- x; auto. appauto H1_ H1_0.
+    + intro... inv H1; rewrite <- x; eauto.
     + apply IHe; auto.
   Qed.
 
@@ -462,15 +451,20 @@ Proof.
 
 (* Full normalization *)
 
-(* Inductive val' : forall {V}, tm V -> Prop :=
-| val'_var : forall V v, @val' V (do var v)
-| val'_app : forall V v e,
-  foldr
-| val'_abs : forall V e t,
-    val' e ->
-    @val' V (do \t, e)
+Inductive nval : forall {V}, tm V -> Prop :=
+| nval_var : forall V v, @nval V (do var v)
+| nval_app_var : forall V e v,
+    nval e ->
+    @nval V (do (var v) e)
+| nval_app : forall V e1 e2 e,
+    nval (do e1 e2) ->
+    nval e ->
+    @nval V (do e1 e2 e)
+| nval_abs : forall V e t,
+    nval e ->
+    @nval V (do \t, e)
 .
-Hint Constructors val' : core. *)
+Hint Constructors nval : core.
 
 Reserved Notation "t1 '-->n' t2" (at level 40).
 Inductive norm : forall {V}, tm V -> tm V -> Prop :=
@@ -479,20 +473,31 @@ Inductive norm : forall {V}, tm V -> tm V -> Prop :=
 | norm_app1 : forall V (e1 e2 e : tm V),
     e1 -->n e2 ->
     do e1 e -->n do e2 e
-| norm_app2 : forall V (e1 e2 e : tm V),
+| norm_app2 : forall V (e1 e2 v : tm V),
+    nval v ->
     e1 -->n e2 ->
-    do e e1 -->n do e e2
+    do v e1 -->n do v e2
 | norm_abs : forall V t (e1 e2 : tm ^V),
     e1 -->n e2 ->
     do \t, e1 -->n do \t, e2
 where "t1 '-->n' t2" := (norm t1 t2).
 Hint Constructors norm : core.
 
+
+Lemma nval_no_steps : forall V e,
+  @nval V e ->
+  ~ exists e', e -->n e'.
+Proof with eauto.
+  intros V e Hval [e' H].
+  induction Hval; inv H...
+  inv H...
+  Qed.
+
 (* For this we need to alter normalization relation -
    for now only closed terms can reduce *)
 Theorem open_preservation : forall V (e e' : tm V),
   e -->n e' -> forall Gamma t,
-  Gamma |- e : t ->
+  Gamma |- e  : t ->
   Gamma |- e' : t.
 Proof.
   intros V e e' Hstep.
@@ -502,3 +507,15 @@ Proof.
     set (H := substitution_lemma _ 0 e (Gamma, A0) e' B).
     apply H in He1; auto.
   Qed.
+
+Theorem open_progress : forall V Gamma e t,
+  Gamma |- e : t ->
+  @nval V e \/ exists e', e -->n e'.
+Proof with try solve [right; eexists; eauto | left; auto].
+  intros V Gamma e t H.
+  dependent induction H...
+  - destruct IHhas_type  as [H0 | [e' H0]]...
+  - destruct IHhas_type1 as [H1 | [e' H1]]... (* e1 makes a step *)
+    destruct IHhas_type2 as [H2 | [e' H2]]... (* e2 makes a step *)
+    destruct H1... (* either an app value [x e1 .. en] or redex *)
+Qed.
