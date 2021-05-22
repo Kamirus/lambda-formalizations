@@ -8,52 +8,65 @@ Require Import Coq.funind.Recdef.
 
 Ltac inv H := dependent destruction H.
 
-Notation "^ f" := (option_map f) (at level 5, right associativity) : function_scope.
-Notation "^ X" := (option X) : type_scope.
-
-
-(* Types *)
-
-Inductive ty :=
-| ty_unit : ty            (* unit is a type *)
-| ty_arr : ty -> ty -> ty (* A -> B is a type when A and B are types *)
-.
-Hint Constructors ty : core.
-
 
 (* Terms *)
 (*
   The representation of terms in the STLC (simply typed lambda calculus)
   depends on how variables are encoded.
 
-  The most readable format represents variables as strings, e.g. [λx: A, f x].
+  The most readable format represents variables as strings, e.g. [λx, f x].
   The problem of this representation is that ⍺-equivalent terms are distinct,
-  e.g. [λx:A, x] ≠ [λy:A, y].
+  e.g. [λx, x] ≠ [λy, y].
 
   To avoid this issue we can encode variables as natural numbers, called
-  de bruijn indices. Then a variable [n] refers to the n-th lambda on a path
+  de bruijn indices, where a variable [n] refers to the n-th lambda on a path
   from the variable occurrence to the root of the term-tree
   (read more: https://en.wikipedia.org/wiki/De_Bruijn_index).
-  e.g. both [λx:A, x] and [λy:A, y] are represented as [λA, 0] in this format.
+  e.g. both [λx, x] and [λy, y] are represented as [λ 0] in this format.
 
-  Note: we need type annotations for our lambda abstractions 
-  .
-  .
+  Another caveat is that, in both representations, we cannot restrict
+  variables occurring out of scope,
+  e.g. [λ 0 7] has a free variable [7] that is not bound to any λ in the term.
 
+  Nested Datatypes together with de bruijn indices allow us to staticly restrict
+  what range of variables is allowed.
   
+  [tm V] is our datatype for terms where free variables are of type [V].
+  - [var v] of type [V] is a term [tm V]
+  - [e1 e2] is a term [tm V] provided that both [e1] and [e2] are terms [tm V]
+  - [λ e] is a term [tm V] if [e] is a term [tm (option V)]
+
+  The trick is in the 3rd case (abstraction)
+  where the body of the lambda [e] can only have variables that are either
+  [None] or [Some v] where [v] is of type [V].
+
+  [None] represents the variable [0] in de bruijn's format,
+  so [None] is a variable occurrence bound to the current λ,
+  while if we want to use variables bound elsewhere we need to 'lift' the variable
+  but using [Some] on it.
+
+  Notation:
+    [^V]    means  [option V]
+    [V ↑ 0] means  [V]  
+    [V ↑ 1] means  [^V]  
+    [V ↑ 2] means  [^^V]
+    ...
  *)
 
-Inductive tm (V : Type) :=      (* terms depend on an abstract variable type [V] *)
-| tm_var : V -> tm V            (* variable [v] is a term [tm V] when [v : V] *)
-| tm_app : tm V -> tm V -> tm V (* an application of e1 to e2 is a term *)
-| tm_abs : tm ^V -> tm V  (*  *)
+Notation "V ↑ n" := (iter _ n option V) (at level 5) : type_scope.
+Notation "^ V" := (option V) (at level 5, right associativity) : type_scope.
+
+(* terms depend on an abstract variable type [V] *)
+Inductive tm (V : Type) :=
+| tm_var : V -> tm V
+| tm_app : tm V -> tm V -> tm V
+| tm_abs : tm ^V -> tm V
 .
 Hint Constructors tm : core.
 Arguments tm_var {V}.
 Arguments tm_app {V}.
 Arguments tm_abs {V}.
 
-Notation "T ↑ n" := (iter _ n option T) (at level 5) : type_scope.
 
 Fixpoint var_n {V : Type} (n : nat) : V ↑ (S n) :=
   match n with
@@ -66,43 +79,87 @@ Notation "<{ e }>" := e (at level 1, e custom stlc at level 99).
 Notation "( x )" := x (in custom stlc, x at level 99).
 Notation "{ x }" := x (in custom stlc at level 0, x constr).
 Notation "x" := x (in custom stlc at level 0, x constr at level 0).
-Notation "0" := (tm_var (var_n 0)) (in custom stlc at level 0).
-Notation "1" := (tm_var (var_n 1)) (in custom stlc at level 0).
-Notation "2" := (tm_var (var_n 2)) (in custom stlc at level 0).
-Notation "3" := (tm_var (var_n 3)) (in custom stlc at level 0).
-Notation "4" := (tm_var (var_n 4)) (in custom stlc at level 0).
-(* Notation "'S' .. 'S' x" := (tm_var (inc_S .. (inc_S x) ..)) (in custom stlc at level 0). *)
+Notation tm_var_n n := (tm_var (var_n n)).
+Notation "0" := (tm_var_n 0) (in custom stlc at level 0).
+Notation "1" := (tm_var_n 1) (in custom stlc at level 0).
+Notation "2" := (tm_var_n 2) (in custom stlc at level 0).
+Notation "3" := (tm_var_n 3) (in custom stlc at level 0).
+Notation "4" := (tm_var_n 4) (in custom stlc at level 0).
 Notation "'var' V" := (tm_var V) (in custom stlc at level 1, left associativity).
 Notation "x y" := (tm_app x y) (in custom stlc at level 1, left associativity).
 Notation "\ e" :=
   (tm_abs e) (in custom stlc at level 90,
                e custom stlc at level 99,
                left associativity).
-(* Coercion tm_var : V >-> tm V. *)
-Notation "S -> T" := (ty_arr S T) (in custom stlc at level 50, right associativity).
-
 
 (* Closed terms *)
+(*
+  Term [tm V] can only have free variables of type [V].
+  So terms [tm False] cannot have free variables.
+  The [tm False] type prevents us from creating open terms.
+
+  Instead of [False] we create an explicit empty type.
+*)
 
 Inductive Void : Type := .
 Definition term := tm Void.
 
-(* Several examples, the type `U` is irrelevant here *)
-Example tm_id : term :=
-  <{ \ 0 }>. (* \x, x *)
-Example tm_ω  : term :=
-  <{ \ 0 0 }>. (* \x, x x *)
-Example tm_Ω  : term :=
-  <{ (\ 0 0) (\ 0 0) }>.
 
-(* Attempt to create open terms *)
+(* Closed terms - Examples *)
+
+Example tm_id : term :=
+  <{ \ 0 }>.             (* \x, x *)
+Example tm_ω  : term :=
+  <{ \ 0 0 }>.           (* \x, x x *)
+Example tm_Ω  : term :=
+  <{ (\ 0 0) (\ 0 0) }>. (* (\x, x x)(\x, x x) *)
+
+(* Failed attempt to create open terms *)
+(* These definitions simply does not type check *)
 Fail Example ex_tm_var : term :=
   <{ 0 }>.
 Fail Example ex_tm_abs : term :=
   <{ \ 1 }>.
 
 
+(* Value *)
+(*
+  Let us first consider call-by-value evaluation strategy that only computes
+  closed terms (we'll show how to do a full normalization later)
+
+  So any lambda abstraction is a value in our language.
+ *)
+
+Inductive val : term -> Prop :=
+| val_abs : forall e, val <{ \ e }>
+.
+Hint Constructors val : core.
+
+(* To define a evaluation relation we first need a substition operation
+   and for that we need lifting... *)
+
+
 (* Lift *)
+(* 
+  Consider a term [e] which can contain free variables: 0, 1, 2, ... k, ...
+
+  1) We need a lift operation (↑) that increments each free variable in a term
+    e.g. so that [ ↑ <{ 0 (\ 0 1) }> = <{ 1 (\ 0 2) }> ]
+                             ^ not a free variable! so it's still 0
+
+  2) To implement (↑) we need a more general version called [lift n k],
+    which adds [n] to every free variable at or above [k] level.
+    e.g.
+      lift n 0 <{ 0 }> = <{ n }>
+      lift n 1 <{ 0 }> = <{ 0 }>
+      lift n 1 <{ 1 }> = <{ n+1 }>
+      lift n 1 <{ 2 }> = <{ n+2 }>
+
+      lift n 0 <{ \ 0 }> = <{ \ 0 }>
+      lift n 1 <{ \ 0 }> = <{ \ 0 }>
+      lift n 1 <{ \ 1 }> = <{ \ 1 }>
+      lift n 1 <{ \ 2 }> = <{ \ n+2 }>
+ *)
 (* source: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.447.5355&rep=rep1&type=pdf *)
 
 (* apply [Some] [n]-times *)
@@ -132,25 +189,63 @@ Fixpoint lift {V : Type}
   | <{ \ e   }> => tm_abs (lift n (S k) e)
   end.
 
-Example lift_ex1 : forall {V : Type},
-@lift (V ↑ 2) 2 1 <{ 0 1 2 }> = <{ 0 3 4 }>.
-Proof. reflexivity. Qed.
+Notation "↑ e" := (lift 1 0 e) (at level 70).
 
-Example lift_ex2 : forall {V : Type},
-@lift (V ↑ 2) 2 1 <{ 0 (\ 0 1 2) }> = <{ 0 (\ 0 1 4) }>.
-Proof. reflexivity. Qed.
+Example lift_examples : forall {V : Type} lift_7,
+  lift_7 = @lift (V ↑ 2) 7 ->
+  lift_7 0 <{   0 }> = tm_var_n 7 /\
+  lift_7 1 <{   0 }> = <{ 0 }> /\
+  lift_7 1 <{   1 }> = tm_var_n (7+1) /\
+  lift_7 1 <{   2 }> = tm_var_n (7+2) /\
+  lift_7 0 <{ \ 0 }> = <{ \ 0 }> /\
+  lift_7 1 <{ \ 0 }> = <{ \ 0 }> /\
+  lift_7 1 <{ \ 1 }> = <{ \ 1 }> /\
+  lift_7 1 <{ \ 2 }> = <{ \ {tm_var_n (7+2)} }>.
+Proof. intros; repeat split; subst; reflexivity. Qed.
 
-Notation "↑ e" := (lift 1 0 e) (at level 99).
+Example lift_ex0 : forall {V : Type} (t : tm V ↑ 3),
+   t = <{ 0 (\ 0 1 2) }> ->
+  ↑t = <{ 1 (\ 0 2 3) }>.
+Proof. intros; subst; reflexivity. Qed.
+
+Example lift_ex1 : forall {V : Type} (t : tm V ↑ 3),
+  t = <{ 1 0 2 }> ->
+  lift 2 1 t = <{ 3 0 4 }>.
+Proof. intros; subst; reflexivity. Qed.
+
+Example lift_ex2 : forall {V : Type} (t : tm V ↑ 3),
+  t = <{ 0 (\ 0 1 2) }> ->
+  lift 2 1 t = <{ 0 (\ 0 1 4) }>.
+Proof. intros; subst; reflexivity. Qed.
+
+
 
 (* Substitution *)
+(*
+  Goal: [tm_subst n e e'] replaces variables [n] appearing in [e] with [e']
 
+  First implement [tm_subst_var]
+  that is a substitution for variable case - when [e = var v]:
+    if [v = n]: return [e'] lifted n-times
+    otherwise: return [e] as nothing can be substituted
+ *)
+
+(* [tm_subst_var n v e]
+  either substitutes [v] for [e] (lifted n-times) when [v = var_n n]
+  or turns [v] into a term
+
+  De bruijn interpretation:
+    [v] is in 0..n range (or a free variable of type V)
+    The substitution returns lifted term [e] when [v] is the variable [n].
+    Otherwise returns [v] which is now in 0..n-1 range as v ≠ n
+*)
 Fixpoint tm_subst_var
   {V : Type} (n : nat) : V ↑ (S n) -> tm V -> tm V ↑ n.
 destruct n; intros [v | ] e;
-[ exact (tm_var v)
-| exact e
-| exact (↑ tm_subst_var _ _ v e)
-| exact (tm_var None)
+[ (* n=0 v=Some *) exact (tm_var v)               (* leave this variable alone *)
+| (* n=0 v=None *) exact e                        (* substitute here! *)
+| (* n>0 v=Some *) exact (↑ tm_subst_var _ _ v e) (* subst recursively, then lift *)
+| (* n>0 v=None *) exact (tm_var None)            (* leave this variable alone *)
 ].
 Defined.
 
@@ -185,17 +280,7 @@ Example subst_ex_4 :
 Proof. intros; reflexivity. Qed.
 
 
-(* Value *)
-
-Inductive val : term -> Prop :=
-| val_abs : forall e, val <{ \ e }>
-.
-Hint Constructors val : core.
-
-
 (* Evaluation *)
-
-(* CBV, could be CBN or undeterministic *)
 
 Reserved Notation "e1 '-->' e2" (at level 40).
 Inductive step : term -> term -> Prop :=
@@ -216,6 +301,18 @@ Proof. unfold tm_ω. intros [e H]. inv H. Qed.
 
 Remark tm_Ω_reduces_to_itself : tm_Ω --> tm_Ω.
 Proof. intros. unfold tm_Ω. constructor. Qed.
+
+
+(* Types *)
+
+Inductive ty :=
+| ty_unit : ty            (* unit is a type *)
+| ty_arr : ty -> ty -> ty (* A -> B is a type when A and B are types *)
+.
+Hint Constructors ty : core.
+
+Notation "S -> T" := (ty_arr S T) (in custom stlc at level 50, right associativity).
+
 
 (* Context *)
 
