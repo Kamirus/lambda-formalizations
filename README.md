@@ -1,2 +1,3 @@
-# System-F-formalization
-System F / λ2 formalization in Coq
+# Simply Typed Lambda Calculus Formalization
+
+[stlc.v](stlc.v)
