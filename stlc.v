@@ -79,7 +79,7 @@ Arguments tm_abs {V}.
 
 (* [var_n n] creates the n-th de bruijn index -
   which is n-times [Some] applied to [None] *)
-Fixpoint var_n {V : Type} (n : nat) : V ↑ n ↑ 1 :=
+Fixpoint var_n {V : Type} (n : nat) : V ↑ 1 ↑ n :=
   match n with
   | 0 => None
   | S n => Some (var_n n)
@@ -257,7 +257,7 @@ Proof. intros; subst; reflexivity. Qed.
     else [var v]
 *)
 Fixpoint tm_subst_var
-  {V : Type} (n : nat) : V ↑ n ↑ 1 -> tm V -> tm V ↑ n.
+  {V : Type} (n : nat) : V ↑ 1 ↑ n -> tm V -> tm V ↑ n.
 destruct n; intros [v | ] e;
 [ (* n=0 v=Some *) exact (tm_var v)               (* leave this variable alone *)
 | (* n=0 v=None *) exact e                        (* substitute here! *)
@@ -267,7 +267,7 @@ destruct n; intros [v | ] e;
 Defined.
 
 Fixpoint tm_subst
-  {V : Type} (n : nat) (e : tm V ↑ n ↑ 1) (e' : tm V) : tm V ↑ n :=
+  {V : Type} (n : nat) (e : tm V ↑ 1 ↑ n) (e' : tm V) : tm V ↑ n :=
   match e with
   | <{ var v }> => tm_subst_var n v e'
   | <{ e1 e2 }> => tm_app (tm_subst n e1 e') (tm_subst n e2 e')
@@ -512,25 +512,14 @@ Proof with cbn in *.
     apply IHe in H; auto.
 Qed.
 
+Notation "Γ \ n" := (drop 1 n Γ) (at level 5).
+
 Theorem Weakening : forall V e (Γ : ctx ^V) A,
-  drop 1 0 Γ |- e : A ->
-  Γ |- {↑ e} : A.
+  Γ \ 0 |-    e  : A ->
+  Γ     |- {↑ e} : A.
 Proof.
   intros. apply weakening in H. assumption.
   Qed.
-
-Fixpoint ctx_rm
-  {V : Type} (n : nat) : ctx V ↑ n ↑ 1 -> ctx V ↑ n :=
-  match n with
-  | 0   => fun ctx v => ctx (Some v)
-  | S n => fun ctx v =>
-      match v with
-      | None   => ctx None
-      | Some v => ctx_rm n (fun v => ctx (Some v)) v
-      end
-  end.
-
-Notation "Γ \ n" := (ctx_rm n Γ) (at level 5).
 
 (* Substitution Lemma *)
 
@@ -560,8 +549,8 @@ Notation "Γ [ n ]" := (Γ (var_n n))
     n constr at level 0).
 
 Lemma substitution_lemma_for_closed : forall n
-  (e : tm  Void ↑ n ↑ 1)
-  (Γ : ctx Void ↑ n ↑ 1)
+  (e : tm  Void ↑ 1 ↑ n)
+  (Γ : ctx Void ↑ 1 ↑ n)
   (e': term) A,
     Γ     |- e           : A    ->
     emp   |- e'          : Γ[n] ->
@@ -581,7 +570,7 @@ Proof with cbn in *.
       * constructor. reflexivity.
   - eauto.
   - constructor.
-    cut (ctx_rm (S n) (Γ, A) |- e [S n := e'] : B).
+    cut ((Γ, A) \ (S n) |- e [S n := e'] : B).
     + intro... inv H1; rewrite <- x; eauto.
     + apply IHe; auto.
 Qed.
@@ -652,12 +641,12 @@ Proof with eauto.
   Qed.
 
 Lemma substitution_lemma : forall V n
-  (e : tm  V ↑ n ↑ 1)
-  (Γ : ctx V ↑ n ↑ 1)
+  (e : tm  V ↑ 1 ↑ n)
+  (Γ : ctx V ↑ 1 ↑ n)
   (e': tm V) A,
-    Γ |- e : A ->
-    drop (S n) 0 Γ |- e' : Γ[n] ->
-    Γ \ n |- e [n := e'] : A.
+    Γ                |- e : A ->
+    (drop n 0 Γ) \ 0 |- e' : Γ[n] ->
+    Γ \ n            |- e [n := e'] : A.
 Proof with cbn in *.
   intros. dependent induction e; inv H...
   - induction n...
@@ -669,7 +658,7 @@ Proof with cbn in *.
       * constructor. reflexivity.
   - eauto.
   - constructor.
-    cut (ctx_rm (S n) (Γ, A) |- e [S n := e'] : B).
+    cut ((Γ, A) \ (S n) |- e [S n := e'] : B).
     + intro... inv H1; rewrite <- x; eauto.
     + apply IHe; auto.
 Qed.
