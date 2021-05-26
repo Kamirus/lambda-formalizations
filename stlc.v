@@ -14,9 +14,13 @@ Ltac inv H := dependent destruction H.
   The representation of terms in the STLC (simply typed lambda calculus)
   depends on how variables are encoded.
 
+  1. variable-as-string
+
   The most readable format represents variables as strings, e.g. [λx, f x].
   The problem of this representation is that ⍺-equivalent terms are distinct,
   e.g. [λx, x] ≠ [λy, y].
+
+  2. de-bruijn-indices
 
   To avoid this issue we can encode variables as natural numbers, called
   de bruijn indices, where a variable [n] refers to the n-th lambda on a path
@@ -28,22 +32,27 @@ Ltac inv H := dependent destruction H.
   variables occurring out of scope,
   e.g. [λ 0 7] has a free variable [7] that is not bound to any λ in the term.
 
+  3. nested-datatypes
+
   Nested Datatypes together with de bruijn indices allow us to staticly restrict
   what range of variables is allowed.
   
   [tm V] is our datatype for terms where free variables are of type [V].
-  - [var v] of type [V] is a term [tm V]
+  - [var v] is a term [tm V] when [v] is of type [V] (free variable occurrence)
   - [e1 e2] is a term [tm V] provided that both [e1] and [e2] are terms [tm V]
   - [λ e] is a term [tm V] if [e] is a term [tm (option V)]
 
   The trick is in the 3rd case (abstraction)
-  where the body of the lambda [e] can only have variables that are either
+  where the [e] (body of the lambda) can only have variables that are either
   [None] or [Some v] where [v] is of type [V].
 
+  Where [None] refers to the variable occurrence bound by the current lambda,
+  whereas a true free variable occurrence of [v] of type [V] under a lambda
+  needs to be wrapped with [Some] - we say 'lifted'.
+
+  In other words:
   [None] represents the variable [0] in de bruijn's format,
-  so [None] is a variable occurrence bound to the current λ,
-  while if we want to use variables bound elsewhere we need to 'lift' the variable
-  but using [Some] on it.
+  while [Some] on a variable [v] acts like a successor function.
 
   Notation:
     [^V]    means  [option V]
@@ -56,7 +65,7 @@ Ltac inv H := dependent destruction H.
 Notation "V ↑ n" := (iter _ n option V) (at level 5) : type_scope.
 Notation "^ V" := (option V) (at level 5, right associativity) : type_scope.
 
-(* terms depend on an abstract variable type [V] *)
+(* [tm V] represents a term with free variables of type [V] *)
 Inductive tm (V : Type) :=
 | tm_var : V -> tm V
 | tm_app : tm V -> tm V -> tm V
@@ -68,7 +77,9 @@ Arguments tm_app {V}.
 Arguments tm_abs {V}.
 
 
-Fixpoint var_n {V : Type} (n : nat) : V ↑ (S n) :=
+(* [var_n n] creates the n-th de bruijn index -
+  which is n-times [Some] applied to [None] *)
+Fixpoint var_n {V : Type} (n : nat) : V ↑ n ↑ 1 :=
   match n with
   | 0 => None
   | S n => Some (var_n n)
@@ -96,9 +107,10 @@ Notation "\ e" :=
 (*
   Term [tm V] can only have free variables of type [V].
   So terms [tm False] cannot have free variables.
-  The [tm False] type prevents us from creating open terms.
+  The [tm False] type prevents us from creating open terms
+  as the type [False] is uninhabited.
 
-  Instead of [False] we create an explicit empty type.
+  Instead of [False] we create an explicit empty type called [Void].
 *)
 
 Inductive Void : Type := .
@@ -108,11 +120,15 @@ Definition term := tm Void.
 (* Closed terms - Examples *)
 
 Example tm_id : term :=
-  <{ \ 0 }>.             (* \x, x *)
+  <{ \ 0 }>.             (* λx, x *)
 Example tm_ω  : term :=
-  <{ \ 0 0 }>.           (* \x, x x *)
+  <{ \ 0 0 }>.           (* λx, x x *)
 Example tm_Ω  : term :=
-  <{ (\ 0 0) (\ 0 0) }>. (* (\x, x x)(\x, x x) *)
+  <{ (\ 0 0) (\ 0 0) }>. (* (λx, x x)(λx, x x) *)
+
+Example tm_ω_without_notation :
+  tm_abs (tm_app (tm_var None) (tm_var None)) = tm_ω.
+Proof. reflexivity. Qed.
 
 (* Failed attempt to create open terms *)
 (* These definitions simply does not type check *)
@@ -135,7 +151,7 @@ Inductive val : term -> Prop :=
 .
 Hint Constructors val : core.
 
-(* To define a evaluation relation we first need a substition operation
+(* To define an evaluation relation we first need a substition operation
    and for that we need lifting... *)
 
 
@@ -169,14 +185,18 @@ Fixpoint lift_var_n {V : Type} (n : nat) : V -> V ↑ n :=
   | S n => fun v => Some (lift_var_n n v)
   end.
 
-(* leave variables less than [k] untouched and remaining ones increase by [n] *)
+(* leave variables less than [k] untouched and remaining ones increase by [n]
+  Idea:
+    if [v = Some^k v'] then [Some^k (Some^n v')]
+    else [v]
+ *)
 Fixpoint lift_var {V : Type}
   (n k : nat) : V ↑ k -> V ↑ n ↑ k.
 destruct k; intro v;
-[ exact (lift_var_n n v)
-| destruct v;
-  [ exact (Some (lift_var V n k i))
-  | exact None
+[ (* k=0 *) exact (lift_var_n n v) (* lift [v] n-times *)
+| (* k>0 *) destruct v;
+  [ (* v=Some *) exact (Some (lift_var V n k i))
+  | (* v=None *) exact None
   ]
 ].
 Defined.
@@ -223,6 +243,7 @@ Proof. intros; subst; reflexivity. Qed.
 (* Substitution *)
 (*
   Goal: [tm_subst n e e'] replaces variables [n] appearing in [e] with [e']
+  Notation: e [n := e']
 
   First implement [tm_subst_var]
   that is a substitution for variable case - when [e = var v]:
@@ -231,16 +252,12 @@ Proof. intros; subst; reflexivity. Qed.
  *)
 
 (* [tm_subst_var n v e]
-  either substitutes [v] for [e] (lifted n-times) when [v = var_n n]
-  or turns [v] into a term
-
-  De bruijn interpretation:
-    [v] is in 0..n range (or a free variable of type V)
-    The substitution returns lifted term [e] when [v] is the variable [n].
-    Otherwise returns [v] which is now in 0..n-1 range as v ≠ n
+  Idea:
+    if [v = Some^n None] then [e] lifted n-times! So: [lift n 0 e]
+    else [var v]
 *)
 Fixpoint tm_subst_var
-  {V : Type} (n : nat) : V ↑ (S n) -> tm V -> tm V ↑ n.
+  {V : Type} (n : nat) : V ↑ n ↑ 1 -> tm V -> tm V ↑ n.
 destruct n; intros [v | ] e;
 [ (* n=0 v=Some *) exact (tm_var v)               (* leave this variable alone *)
 | (* n=0 v=None *) exact e                        (* substitute here! *)
@@ -250,7 +267,7 @@ destruct n; intros [v | ] e;
 Defined.
 
 Fixpoint tm_subst
-  {V : Type} (n : nat) (e : tm V ↑ (S n)) (e' : tm V) : tm V ↑ n :=
+  {V : Type} (n : nat) (e : tm V ↑ n ↑ 1) (e' : tm V) : tm V ↑ n :=
   match e with
   | <{ var v }> => tm_subst_var n v e'
   | <{ e1 e2 }> => tm_app (tm_subst n e1 e') (tm_subst n e2 e')
@@ -422,7 +439,7 @@ Fixpoint drop_n {V : Type} (n : nat) :
   ctx V     :=
     match n with
     | 0 => fun (ctx : ctx V) => ctx
-    | S n => fun (ctx : ctx V ↑ (S n)) => drop_n n (fun v => ctx (Some v))
+    | S n => fun (ctx : ctx V ↑ n ↑ 1) => drop_n n (fun v => ctx (Some v))
     end.
 
 Fixpoint drop {V : Type} (n k : nat) : 
@@ -502,10 +519,8 @@ Proof.
   intros. apply weakening in H. assumption.
   Qed.
 
-(* Substitution Lemma *)
-
 Fixpoint ctx_rm
-  {V : Type} (n : nat) : ctx V ↑ (S n) -> ctx V ↑ n :=
+  {V : Type} (n : nat) : ctx V ↑ n ↑ 1 -> ctx V ↑ n :=
   match n with
   | 0   => fun ctx v => ctx (Some v)
   | S n => fun ctx v =>
@@ -516,6 +531,8 @@ Fixpoint ctx_rm
   end.
 
 Notation "Γ \ n" := (ctx_rm n Γ) (at level 5).
+
+(* Substitution Lemma *)
 
 (* TODO: substitution_lemma for subst closed terms - easier *)
 
@@ -542,17 +559,21 @@ Notation "Γ [ n ]" := (Γ (var_n n))
   (in custom stlc at level 0,
     n constr at level 0).
 
-Lemma substitution_lemma : forall V n
-  (e : tm  V ↑ (S n))
-  (Γ : ctx V ↑ (S n))
-  (e': tm V) A,
-    Γ |- e : A ->
-    drop (S n) 0 Γ |- e' : Γ[n] ->
+Lemma substitution_lemma_for_closed : forall n
+  (e : tm  Void ↑ n ↑ 1)
+  (Γ : ctx Void ↑ n ↑ 1)
+  (e': term) A,
+    Γ     |- e           : A    ->
+    emp   |- e'          : Γ[n] ->
     Γ \ n |- e [n := e'] : A.
 Proof with cbn in *.
   intros. dependent induction e; inv H...
   - induction n...
     + destruct v; auto.
+      (* additional steps for closed lemma *)
+      assert (emp = (fun v : Void => Γ (Some v)))
+        by (apply functional_extensionality; intros; contradiction).
+      rewrite <- H. assumption.
     + destruct v.
       * apply Weakening.
         apply IHn.
@@ -576,7 +597,7 @@ Proof.
   intros e e' Hstep.
   induction Hstep; intros A He; inv He; fold emp in *.
   - inv He1. fold emp in *.
-    set (H := substitution_lemma Void 0 e (emp, A) e' B).
+    set (H := substitution_lemma_for_closed 0 e (emp, A) e' B).
     apply H in He1; auto.
   - apply IHHstep in He1.
     econstructor; eauto.
@@ -630,8 +651,29 @@ Proof with eauto.
   inv H...
   Qed.
 
-(* For this we need to alter normalization relation -
-   for now only closed terms can reduce *)
+Lemma substitution_lemma : forall V n
+  (e : tm  V ↑ n ↑ 1)
+  (Γ : ctx V ↑ n ↑ 1)
+  (e': tm V) A,
+    Γ |- e : A ->
+    drop (S n) 0 Γ |- e' : Γ[n] ->
+    Γ \ n |- e [n := e'] : A.
+Proof with cbn in *.
+  intros. dependent induction e; inv H...
+  - induction n...
+    + destruct v; auto.
+    + destruct v.
+      * apply Weakening.
+        apply IHn.
+        assumption.
+      * constructor. reflexivity.
+  - eauto.
+  - constructor.
+    cut (ctx_rm (S n) (Γ, A) |- e [S n := e'] : B).
+    + intro... inv H1; rewrite <- x; eauto.
+    + apply IHe; auto.
+Qed.
+
 Theorem open_preservation : forall V (e e' : tm V),
   e -->n e' -> forall Γ A,
   Γ |- e  : A ->
