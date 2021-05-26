@@ -298,6 +298,17 @@ Proof. intros; reflexivity. Qed.
 
 
 (* Evaluation *)
+(*
+  Finally we have all pieces to define the evaluation relation.
+
+  [step_redex] reduces a redex [<{ (\ e) e' }>]
+    by substituting [0] in the body [e] with the term [e']
+  
+  [step_app1] reduces the function of an application [<{ e1 e }>]
+
+  [step_app2] reduces the argument of an application [<{ v e1 }>]
+    when the function is already a value
+ *)
 
 Reserved Notation "e1 '-->' e2" (at level 40).
 Inductive step : term -> term -> Prop :=
@@ -320,6 +331,14 @@ Remark tm_Ω_reduces_to_itself : tm_Ω --> tm_Ω.
 Proof. intros. unfold tm_Ω. constructor. Qed.
 
 
+(* Now we want to define the typing relation *)
+(* 
+  We start by defining the datatype for types:
+  - We need one basic type: the unit.
+    Note that we could pick any atomic type, like [Int] or [Bool].
+  - and we need an arrow - the function type
+ *)
+
 (* Types *)
 
 Inductive ty :=
@@ -328,13 +347,25 @@ Inductive ty :=
 .
 Hint Constructors ty : core.
 
-Notation "S -> T" := (ty_arr S T) (in custom stlc at level 50, right associativity).
+Notation "A -> B" := (ty_arr A B) (in custom stlc at level 50, right associativity).
 
 
 (* Context *)
+(*
+  For the typing relation we need a context Γ that remembers a type for each
+  free variable.
+
+  For the nested-datatypes format it's convinient to represent the context as
+  a function of type [V -> ty] so a mapping from free variable to its type.
+
+  So the empty context [·] is of type [Void -> ty]
+    with the only reasonable implementation
+ *)
 
 Definition ctx V := V -> ty.
+
 Definition emp : ctx Void := fun no => match no with end.
+Notation "·" := emp.
 
 Definition ctx_cons {V : Type} (Γ : ctx V) (A : ty) : ctx ^V :=
   fun V' =>
@@ -364,28 +395,30 @@ where "Γ '|-' A ':' T" := (has_type Γ A T).
 Hint Constructors has_type : core.
 
 Remark tm_id_typeable : forall (A:ty),
-  emp |- tm_id : (A -> A).
+  · |- tm_id : (A -> A).
 Proof. unfold tm_id; auto. Qed.
 
-Remark ty_not_equi_recursive : forall A B, A = ty_arr A B -> False.
+Remark ty_not_equi_recursive : forall A B,
+  A = ty_arr A B ->
+  False.
 Proof.
   induction A; intros.
   - discriminate H.
   - injection H; intros; subst.
     eapply IHA1. eassumption.
-  Qed.
+Qed.
 
 Remark tm_ω_not_typeable :
-  ~ exists T, emp |- tm_ω : T.
+  ~ exists T, · |- tm_ω : T.
 Proof.
   unfold tm_ω.
   intros [T H].
   dependent destruction H.
   dependent destruction H.
-  fold emp in *.
+  fold · in *.
   assert (A = ty_arr A B) by (inv H; inv H0; assumption).
   eapply ty_not_equi_recursive. eassumption.
-  Qed.
+Qed.
 
 
 (* Typing is not deterministic for Curry-style terms *)
@@ -400,39 +433,54 @@ Proof.
   unfold typing_deterministic; intro H.
   set (T1 := <{ ty_unit -> ty_unit }>).
   set (T2 := <{ T1 -> T1 }>).
-  assert (H1: emp |- tm_id : T1) by apply tm_id_typeable.
-  assert (H2: emp |- tm_id : T2) by apply tm_id_typeable.
+  assert (H1: · |- tm_id : T1) by apply tm_id_typeable.
+  assert (H2: · |- tm_id : T2) by apply tm_id_typeable.
   cut (T1 = T2). intro H0; discriminate H0.
   eapply H; eauto.
-  Qed.
+Qed.
 
-Lemma val_arr : forall v A B,
+Lemma val_arr_inversion : forall v A B,
   val v ->
-  emp |- v : (A -> B) ->
+  · |- v : (A -> B) ->
   exists e', v = <{ \ e' }>.
 Proof.
   intros.
   inv H0; try inv H.
   exists e. reflexivity.
-  Qed.
+Qed.
 
+(* Our first main theorem: Progress - well-typed terms never get 'stuck'
+  if the term [e] type-checks then it's either a value or it makes a step
+ *)
 Theorem progress : forall e A,
-  emp |- e : A ->
+  · |- e : A ->
   val e \/ exists e', e --> e'.
 Proof with try solve [right; eexists; constructor; eauto | left; constructor].
   intros e A H.
-  dependent induction H; fold emp in *...
-  - contradiction.
+  dependent induction H; fold · in *... (* lambda case solved already: value *)
+  - contradiction. (* variable case is impossible as the terms are closed *)
   - assert (val e1 \/ (exists e', e1 --> e')) by auto; clear IHhas_type1.
     assert (val e2 \/ (exists e', e2 --> e')) by auto; clear IHhas_type2.
     destruct H1 as [H1 | [e' H1]]...
     destruct H2 as [H2 | [e' H2]]...
-    apply (val_arr _ A B) in H1 as [e' H1]; auto.
-    subst...
+    apply (val_arr_inversion _ A B) in H1 as [e' H1]; auto.
+    subst... (* we have a redex *)
 Qed.
 
 
-(* Weakening *)
+(* The second theorem we want to prove is called Preservation,
+  but before we can formalize it we need:
+  - additional context operations
+  - Weakening lemma
+  - Substitution lemma
+ *)
+
+(* [drop n k Γ] is a counterpart for the [lift] operation,
+  but it changes the context while [lift] changes the term
+
+  Idea:
+    [ drop n k (Γ, Bn .. B1, Ak .. A1) = (Γ, Ak .. A1) ]
+ *)
 
 Fixpoint drop_n {V : Type} (n : nat) :
   ctx V ↑ n ->
@@ -464,8 +512,6 @@ Fixpoint drop {V : Type} (n k : nat) :
     Instead of adding Ak..A1 and Bn..B1 types to the context Γ'
     let Γ := Γ', Bn .. B1, Ak .. A1
     and reformulate theorem so that we drop Bn .. B1 from Γ.
-    - drop n k Γ  leaves first k types in the context Γ untouched
-                   and removes next n types
   
   Goal equivalent:
     drop n k Γ |- e : A ->
@@ -476,11 +522,10 @@ Lemma weakening_var : forall V k n (Γ : ctx V ↑ n ↑ k) A v,
   drop n k Γ |- var v : A ->
   Γ |- var {lift_var n k v} : A.
 Proof with cbn in *.
-  intros. subst...
-  induction k...
+  intros; induction k...
   + induction n; auto...
     constructor.
-    apply IHn in H.
+    apply IHn in H; clear IHn.
     inv H. reflexivity.
   + destruct v.
     - constructor.
@@ -521,26 +566,22 @@ Proof.
   intros. apply weakening in H. assumption.
   Qed.
 
-(* Substitution Lemma *)
 
-(* TODO: substitution_lemma for subst closed terms - easier *)
-
-(* Substitution Lemma
+(* Substitution Lemma - closed terms
 
   Goal:
-    Γ', B, Cn .. C1 |- e           : A ->
-    Γ'              |- e'          : B ->
-    Γ'   , Cn .. C1 |- e [n := e'] : A
+    ·, B, Cn .. C1 |- e           : A ->
+    ·              |- e'          : B ->
+    ·   , Cn .. C1 |- e [n := e'] : A
 
   Idea:
     Again, remove instead of adding:
       - Γ \ n  removes the n-th type from the context Γ
       - Γ[n]   gets    the n-th type from the context Γ
-      - drop (S n) 0 Γ removes first n+1 types from Γ
-  
+
   Goal equivalent:
-    Γ |- e : A ->
-    drop (S n) 0 Γ |- e' : Γ[n] ->
+    Γ     |- e           : A ->
+    ·     |- e'          : Γ[n] ->
     Γ \ n |- e [n := e'] : A
 *)
 
@@ -553,14 +594,14 @@ Lemma substitution_lemma_for_closed : forall n
   (Γ : ctx Void ↑ 1 ↑ n)
   (e': term) A,
     Γ     |- e           : A    ->
-    emp   |- e'          : Γ[n] ->
+    ·     |- e'          : Γ[n] ->
     Γ \ n |- e [n := e'] : A.
 Proof with cbn in *.
   intros. dependent induction e; inv H...
   - induction n...
     + destruct v; auto.
       (* additional steps for closed lemma *)
-      assert (emp = (fun v : Void => Γ (Some v)))
+      assert (· = (fun v : Void => Γ (Some v)))
         by (apply functional_extensionality; intros; contradiction).
       rewrite <- H. assumption.
     + destruct v.
@@ -580,13 +621,13 @@ Qed.
 
 Theorem preservation : forall e e',
   e --> e' -> forall A,
-  emp |- e : A ->
-  emp |- e' : A.
+  · |- e  : A ->
+  · |- e' : A.
 Proof.
   intros e e' Hstep.
-  induction Hstep; intros A He; inv He; fold emp in *.
-  - inv He1. fold emp in *.
-    set (H := substitution_lemma_for_closed 0 e (emp, A) e' B).
+  induction Hstep; intros A He; inv He; fold · in *.
+  - inv He1. fold · in *.
+    set (H := substitution_lemma_for_closed 0 e (·, A) e' B).
     apply H in He1; auto.
   - apply IHHstep in He1.
     econstructor; eauto.
@@ -596,7 +637,22 @@ Proof.
 
 
 (* Full normalization *)
+(*
+  Previously we discussed call-by-value evaluation relation [-->] where
+  we did not evaluate terms under binders (here: just lambdas).
 
+  It is worth seeing that the definitions we've seen so far are general enough
+  to prove stronger versions of Progress and Preservation
+  that are not restriced to closed terms.
+
+  We aim to define the full normalization relation [-->n] and since the relation
+  is different, so are the values.
+
+  [nval e] says that the term [e] of type [tm V] (so it can have free variables)
+  is a value. Values can take one of two forms:
+    - [x e1 .. en] is a value when [x] is a variable and [e1] .. [en] are values
+    - [\ e] is a value when [e] is a value
+ *)
 Inductive nval : forall {V}, tm V -> Prop :=
 | nval_var : forall V (v : V),
     nval <{ var v }>
@@ -640,12 +696,32 @@ Proof with eauto.
   inv H...
   Qed.
 
+
+(* Substitution Lemma - open terms
+
+  Goal:
+    Γ', B, Cn .. C1 |- e           : A ->
+    Γ'              |- e'          : B ->
+    Γ'   , Cn .. C1 |- e [n := e'] : A
+
+  Idea:
+    Again, remove instead of adding:
+      - Γ \ n  removes the n-th type from the context Γ
+      - Γ[n]   gets    the n-th type from the context Γ
+      - drop (S n) 0 Γ removes first n+1 types from Γ
+  
+  Goal equivalent:
+    Γ              |- e           : A ->
+    drop (S n) 0 Γ |- e'          : Γ[n] ->
+    Γ \ n          |- e [n := e'] : A
+*)
+
 Lemma substitution_lemma : forall V n
   (e : tm  V ↑ 1 ↑ n)
   (Γ : ctx V ↑ 1 ↑ n)
   (e': tm V) A,
-    Γ                |- e : A ->
-    (drop n 0 Γ) \ 0 |- e' : Γ[n] ->
+    Γ                |- e           : A ->
+    (drop n 0 Γ) \ 0 |- e'          : Γ[n] ->
     Γ \ n            |- e [n := e'] : A.
 Proof with cbn in *.
   intros. dependent induction e; inv H...
