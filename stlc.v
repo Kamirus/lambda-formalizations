@@ -1,4 +1,5 @@
 (* Formalization of the Simply Typed Lambda Calculus using nested datatypes *)
+Section STLC.
 
 (* Goal: Progress and Preservation *)
 
@@ -48,7 +49,7 @@ Ltac inv H := dependent destruction H.
 
   Where [None] refers to the variable occurrence bound by the current lambda,
   whereas a true free variable occurrence of [v] of type [V] under a lambda
-  needs to be wrapped with [Some] - we say 'lifted'.
+  needs to be wrapped with [Some].
 
   In other words:
   [None] represents the variable [0] in de bruijn's format,
@@ -62,8 +63,8 @@ Ltac inv H := dependent destruction H.
     ...
  *)
 
-Notation "V ↑ n" := (iter _ n option V) (at level 5) : type_scope.
-Notation "^ V" := (option V) (at level 5, right associativity) : type_scope.
+Notation "V ↑ n" := (iter _ n option V) (at level 5, left associativity) : type_scope.
+Notation "^ V" := (option V) (at level 4, right associativity) : type_scope.
 
 (* [tm V] represents a term with free variables of type [V] *)
 Inductive tm (V : Type) :=
@@ -78,12 +79,32 @@ Arguments tm_abs {V}.
 
 
 (* [var_n n] creates the n-th de bruijn index -
-  which is n-times [Some] applied to [None] *)
+  which is [Some] applied n-times to [None] *)
 Fixpoint var_n {V : Type} (n : nat) : V ↑ 1 ↑ n :=
   match n with
   | 0 => None
   | S n => Some (var_n n)
   end.
+
+(* Important:
+  Please note that the return type of [var_n] is [V ↑ 1 ↑ n] which is
+  [option V] wrapped n-times with [option], so: [option^n (option V)].
+
+  Notice that it's like wrapping [V] with [option] (1+n)-times,
+  so it should be equivalent to wrapping it (n+1)-times as 1+n = n+1, right?
+
+  Well it's equivalent but we cannot state equality of terms of different types:
+    let v1 = [Some^(n+1) None : V ↑ n ↑ 1]
+    let v2 = [Some^(1+n) None : V ↑ 1 ↑ n]
+    We cannot say [v1 = v2] because their types does not match!
+    The type of [=] is [A -> A -> Prop]
+    and coq cannot normalize both types to the same type
+    
+  The choice between [V ↑ 1 ↑ n] and [V ↑ n ↑ 1] seems irrelevant now,
+  but it is crucial to pick one that is compatible with functions in the
+  following sections.
+  Compatible - meaning that coq can agree that types normalize to the same type.
+ *)
 
 Declare Custom Entry stlc.
 Notation "<{ e }>" := e (at level 1, e custom stlc at level 99).
@@ -175,8 +196,9 @@ Hint Constructors val : core.
       lift n 1 <{ \ 0 }> = <{ \ 0 }>
       lift n 1 <{ \ 1 }> = <{ \ 1 }>
       lift n 1 <{ \ 2 }> = <{ \ n+2 }>
+
+  Learn more in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.447.5355&rep=rep1&type=pdf
  *)
-(* source: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.447.5355&rep=rep1&type=pdf *)
 
 (* apply [Some] [n]-times *)
 Fixpoint lift_var_n {V : Type} (n : nat) : V -> V ↑ n :=
@@ -185,9 +207,11 @@ Fixpoint lift_var_n {V : Type} (n : nat) : V -> V ↑ n :=
   | S n => fun v => Some (lift_var_n n v)
   end.
 
-(* leave variables less than [k] untouched and remaining ones increase by [n]
+(* [lift_var n k v]: increase variable [v] by [n] when it's at least [k]
+
   Idea:
-    if [v = Some^k v'] then [Some^k (Some^n v')]
+    if [v = Some^k (       v')]
+    then [  Some^k (Some^n v')]  : skip k-levels, the rest lift n-times
     else [v]
  *)
 Fixpoint lift_var {V : Type}
@@ -243,28 +267,29 @@ Proof. intros; subst; reflexivity. Qed.
 (* Substitution *)
 (*
   Goal: [tm_subst n e e'] replaces variables [n] appearing in [e] with [e']
-  Notation: e [n := e']
+  Notation: e [n := e'] 'substitute n for e' in e'
 
-  First implement [tm_subst_var]
-  that is a substitution for variable case - when [e = var v]:
-    if [v = n]: return [e'] lifted n-times
+  First implement [tm_subst_var n v e']
+  that is a substitution when [e = var v]:
+    if [v = Some^n None]: return [e'] lifted n-times
     otherwise: return [e] as nothing can be substituted
  *)
-
-(* [tm_subst_var n v e]
-  Idea:
-    if [v = Some^n None] then [e] lifted n-times! So: [lift n 0 e]
-    else [var v]
-*)
 Fixpoint tm_subst_var
   {V : Type} (n : nat) : V ↑ 1 ↑ n -> tm V -> tm V ↑ n.
-destruct n; intros [v | ] e;
-[ (* n=0 v=Some *) exact (tm_var v)               (* leave this variable alone *)
-| (* n=0 v=None *) exact e                        (* substitute here! *)
-| (* n>0 v=Some *) exact (↑ tm_subst_var _ _ v e) (* subst recursively, then lift *)
-| (* n>0 v=None *) exact (tm_var None)            (* leave this variable alone *)
+destruct n; intros [v | ] e';
+[ (* n=0 v=Some *) exact (tm_var v)                (* leave this variable alone *)
+| (* n=0 v=None *) exact e'                        (* substitute here! *)
+| (* n>0 v=Some *) exact (↑ tm_subst_var _ _ v e') (* subst recursively, then lift *)
+| (* n>0 v=None *) exact (tm_var None)             (* leave this variable alone *)
 ].
 Defined.
+
+(*
+  Did you notice the type [V ↑ 1 ↑ n]? We've seen it before in the [var_n].
+
+  Try changing the type in [var_n] to [V ↑ n ↑ 1] and see where coq complains.
+  Can you fix the broken lemma without reverting the change in [var_n]?
+ *)
 
 Fixpoint tm_subst
   {V : Type} (n : nat) (e : tm V ↑ 1 ↑ n) (e' : tm V) : tm V ↑ n :=
@@ -302,7 +327,7 @@ Proof. intros; reflexivity. Qed.
   Finally we have all pieces to define the evaluation relation.
 
   [step_redex] reduces a redex [<{ (\ e) e' }>]
-    by substituting [0] in the body [e] with the term [e']
+    by substituting [0] in the body [e] for the term [e']
   
   [step_app1] reduces the function of an application [<{ e1 e }>]
 
@@ -762,3 +787,5 @@ Proof with try solve [right; eexists; eauto | left; auto].
     destruct IHhas_type2 as [H2 | [e' H2]]... (* e2 makes a step *)
     destruct H1... (* either an app value [x e1 .. en] or redex *)
 Qed.
+
+End STLC.
