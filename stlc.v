@@ -12,7 +12,7 @@ Ltac inv H := dependent destruction H.
 
 (* Terms *)
 (*
-  The representation of terms in the STLC (simply typed lambda calculus)
+  The term representation in the STLC (Simply Typed Lambda Calculus)
   depends on how variables are encoded.
 
   1. variable-as-string
@@ -36,7 +36,7 @@ Ltac inv H := dependent destruction H.
   3. nested-datatypes
 
   Nested Datatypes together with de bruijn indices allow us to staticly restrict
-  what range of variables is allowed.
+  what range of free variables is allowed.
   
   [tm V] is our datatype for terms where free variables are of type [V].
   - [var v] is a term [tm V] when [v] is of type [V] (free variable occurrence)
@@ -47,7 +47,7 @@ Ltac inv H := dependent destruction H.
   where the [e] (body of the lambda) can only have variables that are either
   [None] or [Some v] where [v] is of type [V].
 
-  Where [None] refers to the variable occurrence bound by the current lambda,
+  [None] refers to the variable occurrence bound by the current lambda,
   whereas a true free variable occurrence of [v] of type [V] under a lambda
   needs to be wrapped with [Some].
 
@@ -63,7 +63,7 @@ Ltac inv H := dependent destruction H.
     ...
  *)
 
-Notation "V ↑ n" := (iter _ n option V) (at level 5, left associativity) : type_scope.
+Notation "V ↑ n" := (iter Type n option V) (at level 5, left associativity) : type_scope.
 Notation "^ V" := (option V) (at level 4, right associativity) : type_scope.
 
 (* [tm V] represents a term with free variables of type [V] *)
@@ -94,13 +94,14 @@ Fixpoint var_n {V : Type} (n : nat) : V ↑ 1 ↑ n :=
   so it should be equivalent to wrapping it (n+1)-times as 1+n = n+1, right?
 
   Well it's equivalent but we cannot state equality of terms of different types:
-    let v1 = [Some^(n+1) None : V ↑ n ↑ 1]
-    let v2 = [Some^(1+n) None : V ↑ 1 ↑ n]
+    let v1 = [Some^n None : V ↑ n ↑ 1]
+    let v2 = [Some^n None : V ↑ 1 ↑ n]
     We cannot say [v1 = v2] because their types does not match!
     The type of [=] is [A -> A -> Prop]
     and coq cannot normalize both types to the same type
     
-  The choice between [V ↑ 1 ↑ n] and [V ↑ n ↑ 1] seems irrelevant now,
+  The choice between [V ↑ 1 ↑ n] and [V ↑ n ↑ 1] seems irrelevant now as both
+  types are valid return types for [var_n],
   but it is crucial to pick one that is compatible with functions in the
   following sections.
   Compatible - meaning that coq can agree that types normalize to the same type.
@@ -119,7 +120,7 @@ Notation "3" := (tm_var_n 3) (in custom stlc at level 0).
 Notation "4" := (tm_var_n 4) (in custom stlc at level 0).
 Notation "'var' V" := (tm_var V) (in custom stlc at level 1, left associativity).
 Notation "x y" := (tm_app x y) (in custom stlc at level 1, left associativity).
-Notation "\ e" :=
+Notation "'λ' e" :=
   (tm_abs e) (in custom stlc at level 90,
                e custom stlc at level 99,
                left associativity).
@@ -141,11 +142,11 @@ Definition term := tm Void.
 (* Closed terms - Examples *)
 
 Example tm_id : term :=
-  <{ \ 0 }>.             (* λx, x *)
+  <{ λ 0 }>.             (* λx, x *)
 Example tm_ω  : term :=
-  <{ \ 0 0 }>.           (* λx, x x *)
+  <{ λ 0 0 }>.           (* λx, x x *)
 Example tm_Ω  : term :=
-  <{ (\ 0 0) (\ 0 0) }>. (* (λx, x x)(λx, x x) *)
+  <{ (λ 0 0) (λ 0 0) }>. (* (λx, x x)(λx, x x) *)
 
 Example tm_ω_without_notation :
   tm_abs (tm_app (tm_var None) (tm_var None)) = tm_ω.
@@ -156,7 +157,7 @@ Proof. reflexivity. Qed.
 Fail Example ex_tm_var : term :=
   <{ 0 }>.
 Fail Example ex_tm_abs : term :=
-  <{ \ 1 }>.
+  <{ λ 1 }>.
 
 
 (* Value *)
@@ -168,7 +169,7 @@ Fail Example ex_tm_abs : term :=
  *)
 
 Inductive val : term -> Prop :=
-| val_abs : forall e, val <{ \ e }>
+| val_abs : forall e, val <{ λ e }>
 .
 Hint Constructors val : core.
 
@@ -181,7 +182,7 @@ Hint Constructors val : core.
   Consider a term [e] which can contain free variables: 0, 1, 2, ... k, ...
 
   1) We need a lift operation (↑) that increments each free variable in a term
-    e.g. so that [ ↑ <{ 0 (\ 0 1) }> = <{ 1 (\ 0 2) }> ]
+    e.g. so that [ ↑ <{ 0 (λ 0 1) }> = <{ 1 (λ 0 2) }> ]
                              ^ not a free variable! so it's still 0
 
   2) To implement (↑) we need a more general version called [lift n k],
@@ -192,10 +193,10 @@ Hint Constructors val : core.
       lift n 1 <{ 1 }> = <{ n+1 }>
       lift n 1 <{ 2 }> = <{ n+2 }>
 
-      lift n 0 <{ \ 0 }> = <{ \ 0 }>
-      lift n 1 <{ \ 0 }> = <{ \ 0 }>
-      lift n 1 <{ \ 1 }> = <{ \ 1 }>
-      lift n 1 <{ \ 2 }> = <{ \ n+2 }>
+      lift n 0 <{ λ 0 }> = <{ λ 0 }>
+      lift n 1 <{ λ 0 }> = <{ λ 0 }>
+      lift n 1 <{ λ 1 }> = <{ λ 1 }>
+      lift n 1 <{ λ 2 }> = <{ λ n+2 }>
 
   Learn more in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.447.5355&rep=rep1&type=pdf
  *)
@@ -230,7 +231,7 @@ Fixpoint lift {V : Type}
   match e with
   | <{ var v }> => tm_var (lift_var n k v)
   | <{ e1 e2 }> => tm_app (lift n k e1) (lift n k e2)
-  | <{ \ e   }> => tm_abs (lift n (S k) e)
+  | <{ λ e   }> => tm_abs (lift n (S k) e)
   end.
 
 Notation "↑ e" := (lift 1 0 e) (at level 70).
@@ -241,15 +242,15 @@ Example lift_examples : forall {V : Type} lift_7,
   lift_7 1 <{   0 }> = <{ 0 }> /\
   lift_7 1 <{   1 }> = tm_var_n (7+1) /\
   lift_7 1 <{   2 }> = tm_var_n (7+2) /\
-  lift_7 0 <{ \ 0 }> = <{ \ 0 }> /\
-  lift_7 1 <{ \ 0 }> = <{ \ 0 }> /\
-  lift_7 1 <{ \ 1 }> = <{ \ 1 }> /\
-  lift_7 1 <{ \ 2 }> = <{ \ {tm_var_n (7+2)} }>.
+  lift_7 0 <{ λ 0 }> = <{ λ 0 }> /\
+  lift_7 1 <{ λ 0 }> = <{ λ 0 }> /\
+  lift_7 1 <{ λ 1 }> = <{ λ 1 }> /\
+  lift_7 1 <{ λ 2 }> = <{ λ {tm_var_n (7+2)} }>.
 Proof. intros; repeat split; subst; reflexivity. Qed.
 
 Example lift_ex0 : forall {V : Type} (t : tm V ↑ 3),
-   t = <{ 0 (\ 0 1 2) }> ->
-  ↑t = <{ 1 (\ 0 2 3) }>.
+   t = <{ 0 (λ 0 1 2) }> ->
+  ↑t = <{ 1 (λ 0 2 3) }>.
 Proof. intros; subst; reflexivity. Qed.
 
 Example lift_ex1 : forall {V : Type} (t : tm V ↑ 3),
@@ -258,8 +259,8 @@ Example lift_ex1 : forall {V : Type} (t : tm V ↑ 3),
 Proof. intros; subst; reflexivity. Qed.
 
 Example lift_ex2 : forall {V : Type} (t : tm V ↑ 3),
-  t = <{ 0 (\ 0 1 2) }> ->
-  lift 2 1 t = <{ 0 (\ 0 1 4) }>.
+  t = <{ 0 (λ 0 1 2) }> ->
+  lift 2 1 t = <{ 0 (λ 0 1 4) }>.
 Proof. intros; subst; reflexivity. Qed.
 
 
@@ -296,7 +297,7 @@ Fixpoint tm_subst
   match e with
   | <{ var v }> => tm_subst_var n v e'
   | <{ e1 e2 }> => tm_app (tm_subst n e1 e') (tm_subst n e2 e')
-  | <{ \ e   }> => tm_abs (tm_subst (S n) e e')
+  | <{ λ e   }> => tm_abs (tm_subst (S n) e e')
   end.
 
 Notation "e [ n := e' ]" := (tm_subst n e e')
@@ -310,7 +311,7 @@ Example subst_ex_1 :
 Proof. reflexivity. Qed.
 
 Example subst_ex_2 : forall (e : term),
-  <{ (\ 1 0) [0 := e] }> = <{ \ {↑ e} 0 }>.
+  <{ (λ 1 0) [0 := e] }> = <{ λ {↑ e} 0 }>.
 Proof. intros; reflexivity. Qed.
 
 Example subst_ex_3 :
@@ -326,7 +327,7 @@ Proof. intros; reflexivity. Qed.
 (*
   Finally we have all pieces to define the evaluation relation.
 
-  [step_redex] reduces a redex [<{ (\ e) e' }>]
+  [step_redex] reduces a redex [<{ (λ e) e' }>]
     by substituting [0] in the body [e] for the term [e']
   
   [step_app1] reduces the function of an application [<{ e1 e }>]
@@ -338,7 +339,7 @@ Proof. intros; reflexivity. Qed.
 Reserved Notation "e1 '-->' e2" (at level 40).
 Inductive step : term -> term -> Prop :=
 | step_redex : forall e e',
-    <{ (\ e) e' }> --> <{ e [0 := e'] }>
+    <{ (λ e) e' }> --> <{ e [0 := e'] }>
 | step_app1 : forall e1 e2 e,
     e1 --> e2 ->
     <{ e1 e }> --> <{ e2 e }>
@@ -411,7 +412,7 @@ Inductive has_type : forall {V}, ctx V -> tm V -> ty -> Prop :=
     Γ |- var x : A
 | abs_has_type : forall {V} Γ A B (e : tm ^V),
     Γ, A |- e : B ->
-    Γ |- \ e : (A -> B)
+    Γ |- λ e : (A -> B)
 | app_has_type : forall {V} (Γ : ctx V) B A e1 e2,
     Γ |- e1 : (A -> B) ->
     Γ |- e2 : A ->
@@ -467,7 +468,7 @@ Qed.
 Lemma val_arr_inversion : forall v A B,
   val v ->
   · |- v : (A -> B) ->
-  exists e', v = <{ \ e' }>.
+  exists e', v = <{ λ e' }>.
 Proof.
   intros.
   inv H0; try inv H.
@@ -676,7 +677,7 @@ Proof.
   [nval e] says that the term [e] of type [tm V] (so it can have free variables)
   is a value. Values can take one of two forms:
     - [x e1 .. en] is a value when [x] is a variable and [e1] .. [en] are values
-    - [\ e] is a value when [e] is a value
+    - [λ e] is a value when [e] is a value
  *)
 Inductive nval : forall {V}, tm V -> Prop :=
 | nval_var : forall V (v : V),
@@ -690,14 +691,14 @@ Inductive nval : forall {V}, tm V -> Prop :=
     nval <{ e1 e2 e }>
 | nval_abs : forall V (e : tm ^V),
     nval e ->
-    nval <{ \ e }>
+    nval <{ λ e }>
 .
 Hint Constructors nval : core.
 
 Reserved Notation "t1 '-->n' t2" (at level 40).
 Inductive norm : forall {V}, tm V -> tm V -> Prop :=
 | norm_redex : forall V e (e' : tm V),
-    <{ (\ e) e' }> -->n <{ e [0 := e'] }>
+    <{ (λ e) e' }> -->n <{ e [0 := e'] }>
 | norm_app1 : forall V (e1 e2 e : tm V),
     e1 -->n e2 ->
     <{ e1 e }> -->n <{ e2 e }>
@@ -707,7 +708,7 @@ Inductive norm : forall {V}, tm V -> tm V -> Prop :=
     <{ v e1 }> -->n <{ v e2 }>
 | norm_abs : forall V (e1 e2 : tm ^V),
     e1 -->n e2 ->
-    <{ \ e1 }> -->n <{ \ e2 }>
+    <{ λ e1 }> -->n <{ λ e2 }>
 where "t1 '-->n' t2" := (norm t1 t2).
 Hint Constructors norm : core.
 
