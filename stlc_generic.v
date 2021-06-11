@@ -1,5 +1,5 @@
 (* Formalization of the Simply Typed Lambda Calculus using nested datatypes *)
-Section STLC.
+Section STLC_Generic.
 
 (* Goal: Progress and Preservation *)
 
@@ -8,60 +8,6 @@ Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.funind.Recdef.
 
 Ltac inv H := dependent destruction H.
-
-
-(* Terms *)
-(*
-  The term representation in the STLC (Simply Typed Lambda Calculus)
-  depends on how variables are encoded.
-
-  1. variable-as-string
-
-  The most readable format represents variables as strings, e.g. [λx, f x].
-  The problem of this representation is that ⍺-equivalent terms are distinct,
-  e.g. [λx, x] ≠ [λy, y].
-
-  2. de-bruijn-indices
-
-  To avoid this issue we can encode variables as natural numbers, called
-  de bruijn indices, where a variable [n] refers to the n-th lambda on a path
-  from the variable occurrence to the root of the term-tree
-  (read more: https://en.wikipedia.org/wiki/De_Bruijn_index).
-  e.g. both [λx, x] and [λy, y] are represented as [λ 0] in this format.
-
-  Another caveat is that, in both representations, we cannot restrict
-  variables occurring out of scope,
-  e.g. [λ 0 7] has a free variable [7] that is not bound to any λ in the term.
-
-  3. nested-datatypes
-
-  Nested Datatypes together with de bruijn indices allow us to staticly restrict
-  what range of free variables is allowed.
-  
-  [tm V] is our datatype for terms where free variables are of type [V].
-  - [var v] is a term [tm V] when [v] is of type [V] (free variable occurrence)
-  - [e1 e2] is a term [tm V] provided that both [e1] and [e2] are terms [tm V]
-  - [λ e] is a term [tm V] if [e] is a term [tm (option V)]
-
-  The trick is in the 3rd case (abstraction)
-  where the [e] (body of the lambda) can only have variables that are either
-  [None] or [Some v] where [v] is of type [V].
-
-  [None] refers to the variable occurrence bound by the current lambda,
-  whereas a true free variable occurrence of [v] of type [V] under a lambda
-  needs to be wrapped with [Some].
-
-  In other words:
-  [None] represents the variable [0] in de bruijn's format,
-  while [Some] on a variable [v] acts like a successor function.
-
-  Notation:
-    [^V]    means  [option V]
-    [V ↑ 0] means  [V]  
-    [V ↑ 1] means  [^V]  
-    [V ↑ 2] means  [^^V]
-    ...
- *)
 
 Notation "V ↑ n" := (iter Type n option V) (at level 5, left associativity) : type_scope.
 Notation "^ V" := (option V) (at level 4, right associativity) : type_scope.
@@ -76,6 +22,9 @@ Hint Constructors tm : core.
 Arguments tm_var {V}.
 Arguments tm_app {V}.
 Arguments tm_abs {V}.
+
+
+(* Fixpoint fmap (f : A -> B) (e : tm A) : tm B. *)
 
 
 (* [var_n n] creates the n-th de bruijn index -
@@ -789,4 +738,4 @@ Proof with try solve [right; eexists; eauto | left; auto].
     destruct H1... (* either an app value [x e1 .. en] or redex *)
 Qed.
 
-End STLC.
+End STLC_Generic.
