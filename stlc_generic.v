@@ -24,9 +24,6 @@ Arguments tm_app {V}.
 Arguments tm_abs {V}.
 
 
-(* Fixpoint fmap (f : A -> B) (e : tm A) : tm B. *)
-
-
 (* [var_n n] creates the n-th de bruijn index -
   which is [Some] applied n-times to [None] *)
 Fixpoint var_n {V : Type} (n : nat) : V ↑ 1 ↑ n :=
@@ -73,6 +70,25 @@ Notation "'λ' e" :=
   (tm_abs e) (in custom stlc at level 90,
                e custom stlc at level 99,
                left associativity).
+
+(* https://hal.archives-ouvertes.fr/hal-01294214/document *)
+Fixpoint fmap {A B : Type} (f : A -> B) (e : tm A) : tm B :=
+  match e with
+  | <{ var a }> => <{ var {f a} }>
+  | <{ e1 e2 }> => <{ {fmap f e1} {fmap f e2} }>
+  | <{ λ e'  }> => <{ λ {fmap (option_map f) e'} }>
+  end.
+
+Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
+  match e with
+  | <{ var a }> => f a
+  | <{ e1 e2 }> => <{ {bind f e1} {bind f e2} }>
+  | <{ λ e'  }> => tm_abs (bind (fun a' => 
+      match a' with
+      | None   => tm_var None
+      | Some a => fmap Some (f a)
+      end) e')
+  end.
 
 (* Closed terms *)
 (*
