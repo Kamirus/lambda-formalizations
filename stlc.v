@@ -1,3 +1,7 @@
+(* Deprecated - this is an unnecessarily complex approach that
+   mixes nested-datatypes with De Bruijn indices
+*)
+
 (* Formalization of the Simply Typed Lambda Calculus using nested datatypes *)
 Section STLC.
 

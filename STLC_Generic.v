@@ -1,200 +1,13 @@
 (* Formalization of the Simply Typed Lambda Calculus using nested datatypes *)
-Section STLC_Generic.
 
 (* Goal: Progress and Preservation *)
 
-Require Import Coq.Program.Equality.
-Require Import Coq.Logic.FunctionalExtensionality.
-Require Import Coq.funind.Recdef.
-Require Import Coq.Program.Basics.
-
-Open Scope program_scope.
+Require Export Terms.
+Require Export Coq.Program.Equality.
 
 Ltac inv H := dependent destruction H.
 
-Notation "V ↑ n" := (iter Type n option V) (at level 5, left associativity) : type_scope.
-Notation "^ V" := (option V) (at level 4, right associativity) : type_scope.
-
-(* [tm V] represents a term with free variables of type [V] *)
-Inductive tm (V : Type) :=
-| tm_var : V -> tm V
-| tm_app : tm V -> tm V -> tm V
-| tm_abs : tm ^V -> tm V
-.
-Hint Constructors tm : core.
-Arguments tm_var {V}.
-Arguments tm_app {V}.
-Arguments tm_abs {V}.
-
-
-(* [var_n n] creates the n-th de bruijn index -
-  which is [Some] applied n-times to [None] *)
-Fixpoint var_n {V : Type} (n : nat) : V ↑ 1 ↑ n :=
-  match n with
-  | 0 => None
-  | S n => Some (var_n n)
-  end.
-
-Declare Custom Entry stlc.
-Notation "<{ e }>" := e (at level 1, e custom stlc at level 99).
-Notation "( x )" := x (in custom stlc, x at level 99).
-Notation "{ x }" := x (in custom stlc at level 0, x constr).
-Notation "x" := x (in custom stlc at level 0, x constr at level 0).
-Notation tm_var_n n := (tm_var (var_n n)).
-Notation "0" := (tm_var_n 0) (in custom stlc at level 0).
-Notation "1" := (tm_var_n 1) (in custom stlc at level 0).
-Notation "2" := (tm_var_n 2) (in custom stlc at level 0).
-Notation "3" := (tm_var_n 3) (in custom stlc at level 0).
-Notation "4" := (tm_var_n 4) (in custom stlc at level 0).
-Notation "'var' V" := (tm_var V) (in custom stlc at level 1, left associativity).
-Notation "x y" := (tm_app x y) (in custom stlc at level 1, left associativity).
-Notation "'λ' e" :=
-  (tm_abs e) (in custom stlc at level 90,
-               e custom stlc at level 99,
-               left associativity).
-
-(* https://hal.archives-ouvertes.fr/hal-01294214/document *)
-Fixpoint map {A B : Type} (f : A -> B) (e : tm A) : tm B :=
-  match e with
-  | <{ var a }> => <{ var {f a} }>
-  | <{ e1 e2 }> => <{ {map f e1} {map f e2} }>
-  | <{ λ e'  }> => <{ λ {map (option_map f) e'} }>
-  end.
-
-Notation "f <$> a" := (map f a) (at level 40, left associativity).
-
-Lemma map_id_law : forall {V} (f : V -> V) e,
-  (forall x, f x = x) ->
-  f <$> e = e.
-Proof.
-  intros. induction e; cbn.
-  - rewrite H; reflexivity.
-  - rewrite IHe1; auto.
-    rewrite IHe2; auto.
-  - rewrite IHe; auto.
-    intros [x|]; auto. cbn. rewrite H. reflexivity.
-Qed.
-
-Lemma map_comp_law : forall A e B C (f:A->B) (g:B->C),
-  g <$> (f <$> e) = g ∘ f <$> e.
-Proof.
-  intros A; induction e; intros; auto; cbn.
-  - rewrite IHe1. rewrite IHe2. reflexivity.
-  - rewrite IHe. repeat f_equal. unfold option_map.
-    apply functional_extensionality; intros [x|]; auto.
-Qed.
-
-Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
-  match e with
-  | <{ var a }> => f a
-  | <{ e1 e2 }> => <{ {bind f e1} {bind f e2} }>
-  | <{ λ e'  }> => tm_abs (bind (fun a' => 
-      match a' with
-      | None   => tm_var None
-      | Some a => map Some (f a)
-      end) e')
-  end.
-
-Notation "e >>= f" := (bind f e) (at level 20, left associativity).
-
-Lemma bind_is_map : forall A e B (f:A->B),
-  f <$> e = e >>= (fun v => tm_var (f v)).
-Proof.
-  intros A; induction e; intros; auto; cbn.
-  - rewrite IHe1. rewrite IHe2. reflexivity.
-  - rewrite IHe. repeat f_equal.
-    apply functional_extensionality. intros [x|]; auto.
-Qed.
-
-Lemma bind_law : forall A e B C (f:A->tm B) (g:B->tm C),
-  e >>= f >>= g = e >>= (fun a => f a >>= g).
-Proof.
-  intro A; induction e; intros; auto; cbn.
-  - cbn. rewrite IHe1. rewrite IHe2. reflexivity.
-  - f_equal.
-    rewrite IHe. repeat f_equal.
-    apply functional_extensionality. intros [x|]; cbn; auto.
-    fold (@bind B).
-    repeat rewrite bind_is_map.
-Admitted.
-
-(* Closed terms *)
-(*
-  Term [tm V] can only have free variables of type [V].
-  So terms [tm False] cannot have free variables.
-  The [tm False] type prevents us from creating open terms
-  as the type [False] is uninhabited.
-
-  Instead of [False] we create an explicit empty type called [Void].
-*)
-
-Inductive Void : Type := .
-Definition term := tm Void.
-
-
-(* Closed terms - Examples *)
-
-Example tm_id : term :=
-  <{ λ 0 }>.             (* λx, x *)
-Example tm_ω  : term :=
-  <{ λ 0 0 }>.           (* λx, x x *)
-Example tm_Ω  : term :=
-  <{ (λ 0 0) (λ 0 0) }>. (* (λx, x x)(λx, x x) *)
-
-Example tm_ω_without_notation :
-  tm_abs (tm_app (tm_var None) (tm_var None)) = tm_ω.
-Proof. reflexivity. Qed.
-
-(* Failed attempt to create open terms *)
-(* These definitions simply does not type check *)
-Fail Example ex_tm_var : term :=
-  <{ 0 }>.
-Fail Example ex_tm_abs : term :=
-  <{ λ 1 }>.
-
-
-(* Value *)
-(*
-  Let us first consider call-by-value evaluation strategy that only computes
-  closed terms (we'll show how to do a full normalization later)
-
-  So any lambda abstraction is a value in our language.
- *)
-
-Inductive val : term -> Prop :=
-| val_abs : forall e, val <{ λ e }>
-.
-Hint Constructors val : core.
-
-
-(* Substitution *)
-
-Definition sub {V} e' (v:^V) :=
-  match v with
-  | None => e'
-  | Some v => <{ var v }>
-  end.
-
-Definition tm_subst0 {V} (e:tm ^V) (e':tm V) :=
-  e >>= sub e'.
-
-Notation "e [ 0 := e' ]" := (tm_subst0 e e')
-  (in custom stlc at level 0,
-    e custom stlc,
-    e' custom stlc at level 99).
-
 (* Evaluation *)
-(*
-  Finally we have all pieces to define the evaluation relation.
-
-  [step_redex] reduces a redex [<{ (λ e) e' }>]
-    by substituting [0] in the body [e] for the term [e']
-  
-  [step_app1] reduces the function of an application [<{ e1 e }>]
-
-  [step_app2] reduces the argument of an application [<{ v e1 }>]
-    when the function is already a value
- *)
 
 Reserved Notation "e1 '-->' e2" (at level 40).
 Inductive step : term -> term -> Prop :=
@@ -204,7 +17,7 @@ Inductive step : term -> term -> Prop :=
     e1 --> e2 ->
     <{ e1 e }> --> <{ e2 e }>
 | step_app2 : forall e1 e2 v,
-    val v ->
+    whnf v ->
     e1 --> e2 ->
     <{ v e1 }> --> <{ v e2 }>
 where "e1 '-->' e2" := (step e1 e2).
@@ -217,14 +30,6 @@ Remark tm_Ω_reduces_to_itself : tm_Ω --> tm_Ω.
 Proof. intros. unfold tm_Ω. constructor. Qed.
 
 
-(* Now we want to define the typing relation *)
-(* 
-  We start by defining the datatype for types:
-  - We need one basic type: the unit.
-    Note that we could pick any atomic type, like [Int] or [Bool].
-  - and we need an arrow - the function type
- *)
-
 (* Types *)
 
 Inductive ty :=
@@ -233,7 +38,7 @@ Inductive ty :=
 .
 Hint Constructors ty : core.
 
-Notation "A -> B" := (ty_arr A B) (in custom stlc at level 50, right associativity).
+Notation "A -> B" := (ty_arr A B) (in custom term_scope at level 50, right associativity).
 
 
 (* Context *)
@@ -241,7 +46,7 @@ Notation "A -> B" := (ty_arr A B) (in custom stlc at level 50, right associativi
   For the typing relation we need a context Γ that remembers a type for each
   free variable.
 
-  For the nested-datatypes format it's convinient to represent the context as
+  For the nested-datatypes format it's convenient to represent the context as
   a function of type [V -> ty] so a mapping from free variable to its type.
 
   So the empty context [·] is of type [Void -> ty]
@@ -259,13 +64,13 @@ Definition ctx_cons {V : Type} (A : ty) (Γ : ctx V) : ctx ^V :=
     | None => A
     | Some V => Γ V
     end.
-Notation "Γ , A" := (ctx_cons A Γ) (at level 100, A custom stlc at level 0).
+Notation "Γ , A" := (ctx_cons A Γ) (at level 100, A custom term_scope at level 0).
 
 
 (* Typing relation *)
 
 Reserved Notation "Γ '|-' A ':' T"
-  (at level 101, A custom stlc, T custom stlc at level 0).
+  (at level 101, A custom term_scope, T custom term_scope at level 0).
 Inductive has_type : forall {V}, ctx V -> tm V -> ty -> Prop :=
 | var_has_type : forall {V} Γ (x : V) A,
     Γ x = A ->
@@ -326,7 +131,7 @@ Proof.
 Qed.
 
 Lemma val_arr_inversion : forall v A B,
-  val v ->
+  whnf v ->
   · |- v : (A -> B) ->
   exists e', v = <{ λ e' }>.
 Proof.
@@ -341,13 +146,13 @@ Qed.
  *)
 Theorem progress : forall e A,
   · |- e : A ->
-  val e \/ exists e', e --> e'.
+  whnf e \/ exists e', e --> e'.
 Proof with try solve [right; eexists; constructor; eauto | left; constructor].
   intros e A H.
   dependent induction H; fold · in *... (* lambda case solved already: value *)
   - contradiction. (* variable case is impossible as the terms are closed *)
-  - assert (val e1 \/ (exists e', e1 --> e')) by auto; clear IHhas_type1.
-    assert (val e2 \/ (exists e', e2 --> e')) by auto; clear IHhas_type2.
+  - assert (whnf e1 \/ (exists e', e1 --> e')) by auto; clear IHhas_type1.
+    assert (whnf e2 \/ (exists e', e2 --> e')) by auto; clear IHhas_type2.
     destruct H1 as [H1 | [e' H1]]...
     destruct H2 as [H2 | [e' H2]]...
     apply (val_arr_inversion _ A B) in H1 as [e' H1]; auto.
@@ -440,26 +245,26 @@ Proof.
   We aim to define the full normalization relation [-->n] and since the relation
   is different, so are the values.
 
-  [nval e] says that the term [e] of type [tm V] (so it can have free variables)
+  [nf e] says that the term [e] of type [tm V] (so it can have free variables)
   is a value. Values can take one of two forms:
     - [x e1 .. en] is a value when [x] is a variable and [e1] .. [en] are values
     - [λ e] is a value when [e] is a value
  *)
-Inductive nval : forall {V}, tm V -> Prop :=
+Inductive nf : forall {V}, tm V -> Prop :=
 | nval_var : forall V (v : V),
-    nval <{ var v }>
+    nf <{ var v }>
 | nval_app_var : forall V e (v : V),
-    nval e ->
-    nval <{ (var v) e }>
+    nf e ->
+    nf <{ (var v) e }>
 | nval_app : forall V (e1 e2 e : tm V),
-    nval <{ e1 e2 }> ->
-    nval e ->
-    nval <{ e1 e2 e }>
+    nf <{ e1 e2 }> ->
+    nf e ->
+    nf <{ e1 e2 e }>
 | nval_abs : forall V (e : tm ^V),
-    nval e ->
-    nval <{ λ e }>
+    nf e ->
+    nf <{ λ e }>
 .
-Hint Constructors nval : core.
+Hint Constructors nf : core.
 
 Reserved Notation "t1 '-->n' t2" (at level 40).
 Inductive norm : forall {V}, tm V -> tm V -> Prop :=
@@ -469,7 +274,7 @@ Inductive norm : forall {V}, tm V -> tm V -> Prop :=
     e1 -->n e2 ->
     <{ e1 e }> -->n <{ e2 e }>
 | norm_app2 : forall V (e1 e2 v : tm V),
-    nval v ->
+    nf v ->
     e1 -->n e2 ->
     <{ v e1 }> -->n <{ v e2 }>
 | norm_abs : forall V (e1 e2 : tm ^V),
@@ -480,7 +285,7 @@ Hint Constructors norm : core.
 
 
 Lemma nval_no_steps : forall V (e : tm V),
-  nval e ->
+  nf e ->
   ~ exists e', e -->n e'.
 Proof with eauto.
   intros V e Hval [e' H].
@@ -501,7 +306,7 @@ Proof.
 
 Theorem open_progress : forall V Γ (e : tm V) A,
   Γ |- e : A ->
-  nval e \/ exists e', e -->n e'.
+  nf e \/ exists e', e -->n e'.
 Proof with try solve [right; eexists; eauto | left; auto].
   intros V Γ e A H.
   dependent induction H...
@@ -510,5 +315,3 @@ Proof with try solve [right; eexists; eauto | left; auto].
     destruct IHhas_type2 as [H2 | [e' H2]]... (* e2 makes a step *)
     destruct H1... (* either an app value [x e1 .. en] or redex *)
 Qed.
-
-End STLC_Generic.
