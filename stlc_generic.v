@@ -6,6 +6,9 @@ Section STLC_Generic.
 Require Import Coq.Program.Equality.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.funind.Recdef.
+Require Import Coq.Program.Basics.
+
+Open Scope program_scope.
 
 Ltac inv H := dependent destruction H.
 
@@ -32,27 +35,6 @@ Fixpoint var_n {V : Type} (n : nat) : V ↑ 1 ↑ n :=
   | S n => Some (var_n n)
   end.
 
-(* Important:
-  Please note that the return type of [var_n] is [V ↑ 1 ↑ n] which is
-  [option V] wrapped n-times with [option], so: [option^n (option V)].
-
-  Notice that it's like wrapping [V] with [option] (1+n)-times,
-  so it should be equivalent to wrapping it (n+1)-times as 1+n = n+1, right?
-
-  Well it's equivalent but we cannot state equality of terms of different types:
-    let v1 = [Some^n None : V ↑ n ↑ 1]
-    let v2 = [Some^n None : V ↑ 1 ↑ n]
-    We cannot say [v1 = v2] because their types does not match!
-    The type of [=] is [A -> A -> Prop]
-    and coq cannot normalize both types to the same type
-    
-  The choice between [V ↑ 1 ↑ n] and [V ↑ n ↑ 1] seems irrelevant now as both
-  types are valid return types for [var_n],
-  but it is crucial to pick one that is compatible with functions in the
-  following sections.
-  Compatible - meaning that coq can agree that types normalize to the same type.
- *)
-
 Declare Custom Entry stlc.
 Notation "<{ e }>" := e (at level 1, e custom stlc at level 99).
 Notation "( x )" := x (in custom stlc, x at level 99).
@@ -72,12 +54,35 @@ Notation "'λ' e" :=
                left associativity).
 
 (* https://hal.archives-ouvertes.fr/hal-01294214/document *)
-Fixpoint fmap {A B : Type} (f : A -> B) (e : tm A) : tm B :=
+Fixpoint map {A B : Type} (f : A -> B) (e : tm A) : tm B :=
   match e with
   | <{ var a }> => <{ var {f a} }>
-  | <{ e1 e2 }> => <{ {fmap f e1} {fmap f e2} }>
-  | <{ λ e'  }> => <{ λ {fmap (option_map f) e'} }>
+  | <{ e1 e2 }> => <{ {map f e1} {map f e2} }>
+  | <{ λ e'  }> => <{ λ {map (option_map f) e'} }>
   end.
+
+Notation "f <$> a" := (map f a) (at level 40, left associativity).
+
+Lemma map_id_law : forall {V} (f : V -> V) e,
+  (forall x, f x = x) ->
+  f <$> e = e.
+Proof.
+  intros. induction e; cbn.
+  - rewrite H; reflexivity.
+  - rewrite IHe1; auto.
+    rewrite IHe2; auto.
+  - rewrite IHe; auto.
+    intros [x|]; auto. cbn. rewrite H. reflexivity.
+Qed.
+
+Lemma map_comp_law : forall A e B C (f:A->B) (g:B->C),
+  g <$> (f <$> e) = g ∘ f <$> e.
+Proof.
+  intros A; induction e; intros; auto; cbn.
+  - rewrite IHe1. rewrite IHe2. reflexivity.
+  - rewrite IHe. repeat f_equal. unfold option_map.
+    apply functional_extensionality; intros [x|]; auto.
+Qed.
 
 Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
   match e with
@@ -86,9 +91,32 @@ Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
   | <{ λ e'  }> => tm_abs (bind (fun a' => 
       match a' with
       | None   => tm_var None
-      | Some a => fmap Some (f a)
+      | Some a => map Some (f a)
       end) e')
   end.
+
+Notation "e >>= f" := (bind f e) (at level 20, left associativity).
+
+Lemma bind_is_map : forall A e B (f:A->B),
+  f <$> e = e >>= (fun v => tm_var (f v)).
+Proof.
+  intros A; induction e; intros; auto; cbn.
+  - rewrite IHe1. rewrite IHe2. reflexivity.
+  - rewrite IHe. repeat f_equal.
+    apply functional_extensionality. intros [x|]; auto.
+Qed.
+
+Lemma bind_law : forall A e B C (f:A->tm B) (g:B->tm C),
+  e >>= f >>= g = e >>= (fun a => f a >>= g).
+Proof.
+  intro A; induction e; intros; auto; cbn.
+  - cbn. rewrite IHe1. rewrite IHe2. reflexivity.
+  - f_equal.
+    rewrite IHe. repeat f_equal.
+    apply functional_extensionality. intros [x|]; cbn; auto.
+    fold (@bind B).
+    repeat rewrite bind_is_map.
+Admitted.
 
 (* Closed terms *)
 (*
@@ -138,155 +166,22 @@ Inductive val : term -> Prop :=
 .
 Hint Constructors val : core.
 
-(* To define an evaluation relation we first need a substition operation
-   and for that we need lifting... *)
-
-
-(* Lift *)
-(* 
-  Consider a term [e] which can contain free variables: 0, 1, 2, ... k, ...
-
-  1) We need a lift operation (↑) that increments each free variable in a term
-    e.g. so that [ ↑ <{ 0 (λ 0 1) }> = <{ 1 (λ 0 2) }> ]
-                             ^ not a free variable! so it's still 0
-
-  2) To implement (↑) we need a more general version called [lift n k],
-    which adds [n] to every free variable at or above [k] level.
-    e.g.
-      lift n 0 <{ 0 }> = <{ n }>
-      lift n 1 <{ 0 }> = <{ 0 }>
-      lift n 1 <{ 1 }> = <{ n+1 }>
-      lift n 1 <{ 2 }> = <{ n+2 }>
-
-      lift n 0 <{ λ 0 }> = <{ λ 0 }>
-      lift n 1 <{ λ 0 }> = <{ λ 0 }>
-      lift n 1 <{ λ 1 }> = <{ λ 1 }>
-      lift n 1 <{ λ 2 }> = <{ λ n+2 }>
-
-  Learn more in http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.447.5355&rep=rep1&type=pdf
- *)
-
-(* apply [Some] [n]-times *)
-Fixpoint lift_var_n {V : Type} (n : nat) : V -> V ↑ n :=
-  match n with
-  | 0 => fun v => v
-  | S n => fun v => Some (lift_var_n n v)
-  end.
-
-(* [lift_var n k v]: increase variable [v] by [n] when it's at least [k]
-
-  Idea:
-    if [v = Some^k (       v')]
-    then [  Some^k (Some^n v')]  : skip k-levels, the rest lift n-times
-    else [v]
- *)
-Fixpoint lift_var {V : Type}
-  (n k : nat) : V ↑ k -> V ↑ n ↑ k.
-destruct k; intro v;
-[ (* k=0 *) exact (lift_var_n n v) (* lift [v] n-times *)
-| (* k>0 *) destruct v;
-  [ (* v=Some *) exact (Some (lift_var V n k i))
-  | (* v=None *) exact None
-  ]
-].
-Defined.
-
-Fixpoint lift {V : Type}
-  (n k : nat) (e : tm V ↑ k) : tm V ↑ n ↑ k :=
-  match e with
-  | <{ var v }> => tm_var (lift_var n k v)
-  | <{ e1 e2 }> => tm_app (lift n k e1) (lift n k e2)
-  | <{ λ e   }> => tm_abs (lift n (S k) e)
-  end.
-
-Notation "↑ e" := (lift 1 0 e) (at level 70).
-
-Example lift_examples : forall {V : Type} lift_7,
-  lift_7 = @lift (V ↑ 2) 7 ->
-  lift_7 0 <{   0 }> = tm_var_n 7 /\
-  lift_7 1 <{   0 }> = <{ 0 }> /\
-  lift_7 1 <{   1 }> = tm_var_n (7+1) /\
-  lift_7 1 <{   2 }> = tm_var_n (7+2) /\
-  lift_7 0 <{ λ 0 }> = <{ λ 0 }> /\
-  lift_7 1 <{ λ 0 }> = <{ λ 0 }> /\
-  lift_7 1 <{ λ 1 }> = <{ λ 1 }> /\
-  lift_7 1 <{ λ 2 }> = <{ λ {tm_var_n (7+2)} }>.
-Proof. intros; repeat split; subst; reflexivity. Qed.
-
-Example lift_ex0 : forall {V : Type} (t : tm V ↑ 3),
-   t = <{ 0 (λ 0 1 2) }> ->
-  ↑t = <{ 1 (λ 0 2 3) }>.
-Proof. intros; subst; reflexivity. Qed.
-
-Example lift_ex1 : forall {V : Type} (t : tm V ↑ 3),
-  t = <{ 1 0 2 }> ->
-  lift 2 1 t = <{ 3 0 4 }>.
-Proof. intros; subst; reflexivity. Qed.
-
-Example lift_ex2 : forall {V : Type} (t : tm V ↑ 3),
-  t = <{ 0 (λ 0 1 2) }> ->
-  lift 2 1 t = <{ 0 (λ 0 1 4) }>.
-Proof. intros; subst; reflexivity. Qed.
-
-
 
 (* Substitution *)
-(*
-  Goal: [tm_subst n e e'] replaces variables [n] appearing in [e] with [e']
-  Notation: e [n := e'] 'substitute n for e' in e'
 
-  First implement [tm_subst_var n v e']
-  that is a substitution when [e = var v]:
-    if [v = Some^n None]: return [e'] lifted n-times
-    otherwise: return [e] as nothing can be substituted
- *)
-Fixpoint tm_subst_var
-  {V : Type} (n : nat) : V ↑ 1 ↑ n -> tm V -> tm V ↑ n.
-destruct n; intros [v | ] e';
-[ (* n=0 v=Some *) exact (tm_var v)                (* leave this variable alone *)
-| (* n=0 v=None *) exact e'                        (* substitute here! *)
-| (* n>0 v=Some *) exact (↑ tm_subst_var _ _ v e') (* subst recursively, then lift *)
-| (* n>0 v=None *) exact (tm_var None)             (* leave this variable alone *)
-].
-Defined.
-
-(*
-  Did you notice the type [V ↑ 1 ↑ n]? We've seen it before in the [var_n].
-
-  Try changing the type in [var_n] to [V ↑ n ↑ 1] and see where coq complains.
-  Can you fix the broken lemma without reverting the change in [var_n]?
- *)
-
-Fixpoint tm_subst
-  {V : Type} (n : nat) (e : tm V ↑ 1 ↑ n) (e' : tm V) : tm V ↑ n :=
-  match e with
-  | <{ var v }> => tm_subst_var n v e'
-  | <{ e1 e2 }> => tm_app (tm_subst n e1 e') (tm_subst n e2 e')
-  | <{ λ e   }> => tm_abs (tm_subst (S n) e e')
+Definition sub {V} e' (v:^V) :=
+  match v with
+  | None => e'
+  | Some v => <{ var v }>
   end.
 
-Notation "e [ n := e' ]" := (tm_subst n e e')
+Definition tm_subst0 {V} (e:tm ^V) (e':tm V) :=
+  e >>= sub e'.
+
+Notation "e [ 0 := e' ]" := (tm_subst0 e e')
   (in custom stlc at level 0,
     e custom stlc,
-    e' custom stlc at level 99,
-    n constr at level 0).
-
-Example subst_ex_1 :
-  <{ (0 0) [0 := tm_ω] }> = tm_Ω.
-Proof. reflexivity. Qed.
-
-Example subst_ex_2 : forall (e : term),
-  <{ (λ 1 0) [0 := e] }> = <{ λ {↑ e} 0 }>.
-Proof. intros; reflexivity. Qed.
-
-Example subst_ex_3 :
-  <{ (1 0) [0 := {↑ tm_id}] }> = <{ 0 {↑ tm_id} }>.
-Proof. intros; reflexivity. Qed.
-
-Example subst_ex_4 :
-  <{ (1 0) [S 0 := tm_id] }> = <{ {↑ tm_id} 0 }>.
-Proof. intros; reflexivity. Qed.
-
+    e' custom stlc at level 99).
 
 (* Evaluation *)
 (*
@@ -358,13 +253,13 @@ Definition ctx V := V -> ty.
 Definition emp : ctx Void := fun no => match no with end.
 Notation "·" := emp.
 
-Definition ctx_cons {V : Type} (Γ : ctx V) (A : ty) : ctx ^V :=
+Definition ctx_cons {V : Type} (A : ty) (Γ : ctx V) : ctx ^V :=
   fun V' =>
     match V' with
     | None => A
     | Some V => Γ V
     end.
-Notation "Γ , A" := (ctx_cons Γ A) (at level 100, A custom stlc at level 0).
+Notation "Γ , A" := (ctx_cons A Γ) (at level 100, A custom stlc at level 0).
 
 
 (* Typing relation *)
@@ -440,6 +335,7 @@ Proof.
   exists e. reflexivity.
 Qed.
 
+(* Progress *)
 (* Our first main theorem: Progress - well-typed terms never get 'stuck'
   if the term [e] type-checks then it's either a value or it makes a step
  *)
@@ -459,96 +355,29 @@ Proof with try solve [right; eexists; constructor; eauto | left; constructor].
 Qed.
 
 
+(* Weakening *)
 (* The second theorem we want to prove is called Preservation,
   but before we can formalize it we need:
-  - additional context operations
   - Weakening lemma
   - Substitution lemma
  *)
 
-(* [drop n k Γ] is a counterpart for the [lift] operation,
-  but it changes the context while [lift] changes the term
+Lemma compose_cons : forall V W Γ (f:V->W) A,
+  Γ ∘ f, A = (Γ, A) ∘ option_map f.
+Proof. intros; apply functional_extensionality; destruct x; auto. Qed.
 
-  Idea:
-    [ drop n k (Γ, Bn .. B1, Ak .. A1) = (Γ, Ak .. A1) ]
- *)
-
-Fixpoint drop_n {V : Type} (n : nat) :
-  ctx V ↑ n ->
-  ctx V     :=
-    match n with
-    | 0 => fun (ctx : ctx V) => ctx
-    | S n => fun (ctx : ctx V ↑ n ↑ 1) => drop_n n (fun v => ctx (Some v))
-    end.
-
-Fixpoint drop {V : Type} (n k : nat) : 
-  ctx V ↑ n ↑ k ->
-  ctx V     ↑ k :=
-    match k with
-    | 0   => fun ctx => drop_n n ctx
-    | S k => fun ctx => fun v =>
-      match v with
-      | None   => ctx None
-      | Some i => drop _ _ (fun v => ctx (Some v)) i
-      end
-    end.
-
-(* Weakening
-
-  Goal:
-    Γ'          , Ak .. A1 |-          e : A ->
-    Γ', Bn .. B1, Ak .. A1 |- lift n k e : A
-
-  Idea:
-    Instead of adding Ak..A1 and Bn..B1 types to the context Γ'
-    let Γ := Γ', Bn .. B1, Ak .. A1
-    and reformulate theorem so that we drop Bn .. B1 from Γ.
-  
-  Goal equivalent:
-    drop n k Γ |- e : A ->
-    Γ |- lift n k e : A
- *)
-
-Lemma weakening_var : forall V k n (Γ : ctx V ↑ n ↑ k) A v,
-  drop n k Γ |- var v : A ->
-  Γ |- var {lift_var n k v} : A.
-Proof with cbn in *.
-  intros; induction k...
-  + induction n; auto...
-    constructor.
-    apply IHn in H; clear IHn.
-    inv H. reflexivity.
-  + destruct v.
-    - constructor.
-      set (G := fun v => Γ (Some v)).
-      specialize IHk with (Γ := G) (v := i).
-      cut (G |- var {lift_var n k i} : A).
-      * intros H0. inv H0. reflexivity.
-      * apply IHk. clear IHk. subst G.
-        inv H. auto.
-    - inv H. auto.
-Qed.
-
-Lemma drop_cons : forall V n k (Γ : ctx V ↑ n ↑ k) A e B,
-  (drop n    k   Γ), A  |- e : B ->
-   drop n (S k) (Γ , A) |- e : B.
+Theorem weakening : forall V e W (f:V->W) Γ A,
+  Γ ∘ f |- e : A ->
+  Γ |- {f <$> e} : A.
 Proof.
-  intros. induction H; eauto.
+  induction e; intros; inv H; cbn; auto.
+  - econstructor; eauto.
+  - constructor. apply IHe.
+    rewrite <- compose_cons. assumption.
 Qed.
 
-Theorem weakening : forall V k e n (Γ : ctx V ↑ n ↑ k) A,
-  drop n k Γ |- e : A ->
-  Γ |- {lift n k e} : A.
-Proof with cbn in *.
-  dependent induction e; intros; inv H...
-  - apply weakening_var. auto.
-  - eauto.
-  - constructor.
-    apply drop_cons in H.
-    apply IHe in H; auto.
-Qed.
-
-Notation "Γ \ n" := (drop 1 n Γ) (at level 5).
+Notation "↑ e" := (Some <$> e) (at level 70).
+Notation "Γ \ 0" := (fun v => Γ (Some v)) (at level 5).
 
 Theorem Weakening : forall V e (Γ : ctx ^V) A,
   Γ \ 0 |-    e  : A ->
@@ -557,54 +386,27 @@ Proof.
   intros. apply weakening in H. assumption.
   Qed.
 
+Lemma substitution_lemma : forall V e W (f:ctx W->ctx V) (fsub:V->tm W) Γ A,
+  (forall v, Γ |- {fsub v} : {f Γ v}) ->
+  f Γ |- e : A ->
+  Γ |- {e >>= fsub} : A.
+Proof.
+  induction e; intros W f fsub Γ A Hv He; inv He; cbn; auto; econstructor; eauto.
+  apply IHe with (f := fun _ => f Γ, A); auto.
+  intros [v|]; cbn; auto.
+  apply weakening.
+  assert (HΓ: (Γ, A) ∘ Some = Γ) by (apply functional_extensionality; auto).
+  rewrite HΓ. apply Hv.
+Qed.
 
-(* Substitution Lemma - closed terms
-
-  Goal:
-    ·, B, Cn .. C1 |- e           : A ->
-    ·              |- e'          : B ->
-    ·   , Cn .. C1 |- e [n := e'] : A
-
-  Idea:
-    Again, remove instead of adding:
-      - Γ \ n  removes the n-th type from the context Γ
-      - Γ[n]   gets    the n-th type from the context Γ
-
-  Goal equivalent:
-    Γ     |- e           : A ->
-    ·     |- e'          : Γ[n] ->
-    Γ \ n |- e [n := e'] : A
-*)
-
-Notation "Γ [ n ]" := (Γ (var_n n))
-  (in custom stlc at level 0,
-    n constr at level 0).
-
-Lemma substitution_lemma_for_closed : forall n
-  (e : tm  Void ↑ 1 ↑ n)
-  (Γ : ctx Void ↑ 1 ↑ n)
-  (e': term) A,
-    Γ     |- e           : A    ->
-    ·     |- e'          : Γ[n] ->
-    Γ \ n |- e [n := e'] : A.
-Proof with cbn in *.
-  intros. dependent induction e; inv H...
-  - induction n...
-    + destruct v; auto.
-      (* additional steps for closed lemma *)
-      assert (· = (fun v : Void => Γ (Some v)))
-        by (apply functional_extensionality; intros; contradiction).
-      rewrite <- H. assumption.
-    + destruct v.
-      * apply Weakening.
-        apply IHn.
-        assumption.
-      * constructor. reflexivity.
-  - eauto.
-  - constructor.
-    cut ((Γ, A) \ (S n) |- e [S n := e'] : B).
-    + intro... inv H1; rewrite <- x; eauto.
-    + apply IHe; auto.
+Lemma Substitution_lemma : forall V e (e':tm V) Γ A B,
+  Γ, B |- e : A ->
+  Γ |- e' : B ->
+  Γ |- e [0 := e'] : A.
+Proof.
+  intros V e e' Γ A B He He'.
+  apply (substitution_lemma ^V e V (ctx_cons B) (sub e') Γ A); auto.
+  intros [v|]; cbn; auto.
 Qed.
 
 
@@ -618,8 +420,7 @@ Proof.
   intros e e' Hstep.
   induction Hstep; intros A He; inv He; fold · in *.
   - inv He1. fold · in *.
-    set (H := substitution_lemma_for_closed 0 e (·, A) e' B).
-    apply H in He1; auto.
+    eapply Substitution_lemma; eauto.
   - apply IHHstep in He1.
     econstructor; eauto.
   - apply IHHstep in He2.
@@ -687,49 +488,6 @@ Proof with eauto.
   inv H...
   Qed.
 
-
-(* Substitution Lemma - open terms
-
-  Goal:
-    Γ', B, Cn .. C1 |- e           : A ->
-    Γ'              |- e'          : B ->
-    Γ'   , Cn .. C1 |- e [n := e'] : A
-
-  Idea:
-    Again, remove instead of adding:
-      - Γ \ n  removes the n-th type from the context Γ
-      - Γ[n]   gets    the n-th type from the context Γ
-      - drop (S n) 0 Γ removes first n+1 types from Γ
-  
-  Goal equivalent:
-    Γ              |- e           : A ->
-    drop (S n) 0 Γ |- e'          : Γ[n] ->
-    Γ \ n          |- e [n := e'] : A
-*)
-
-Lemma substitution_lemma : forall V n
-  (e : tm  V ↑ 1 ↑ n)
-  (Γ : ctx V ↑ 1 ↑ n)
-  (e': tm V) A,
-    Γ                |- e           : A ->
-    (drop n 0 Γ) \ 0 |- e'          : Γ[n] ->
-    Γ \ n            |- e [n := e'] : A.
-Proof with cbn in *.
-  intros. dependent induction e; inv H...
-  - induction n...
-    + destruct v; auto.
-    + destruct v.
-      * apply Weakening.
-        apply IHn.
-        assumption.
-      * constructor. reflexivity.
-  - eauto.
-  - constructor.
-    cut ((Γ, A) \ (S n) |- e [S n := e'] : B).
-    + intro... inv H1; rewrite <- x; eauto.
-    + apply IHe; auto.
-Qed.
-
 Theorem open_preservation : forall V (e e' : tm V),
   e -->n e' -> forall Γ A,
   Γ |- e  : A ->
@@ -738,8 +496,7 @@ Proof.
   intros V e e' Hstep.
   induction Hstep; intros Γ t0 He; inv He; try (econstructor; eauto).
   - inv He1.
-    set (H := substitution_lemma _ 0 e (Γ, A) e' B).
-    apply H in He1; auto.
+    eapply Substitution_lemma; eauto.
   Qed.
 
 Theorem open_progress : forall V Γ (e : tm V) A,
