@@ -1,0 +1,4 @@
+#!/bin/bash
+
+rm -f *.aux .*.aux *.glob *.vo *.vok *.vos
+coq_makefile -f _CoqProject *.v -o Makefile
