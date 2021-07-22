@@ -167,11 +167,23 @@ Qed.
 ).
 Lemma bind_law : ∀ A e, bind_law_for bind A e. *)
 
-
 (* Closed terms *)
 
 Inductive Void : Type := .
 Definition term := tm Void.
+Definition value := val Void.
+
+(* Substitution *)
+
+Definition sub_var {V} (e': val V) (v:^V) : val V :=
+  match v with
+  | None => e'
+  | Some v => val_var v
+  end.
+
+Definition sub {V} (e:tm ^V) (e':val V) : tm V :=
+  bind (sub_var e') e.
+
 
 (* Examples *)
 
@@ -183,9 +195,9 @@ Example tm_e1 a z b : term := <{ <a <(S₀λ S₀λ 1 (0 z)) b>> }>.
 
 Example tm_shift_id  e : term := <{ S₀λ 0 $ e }>.
 
-(* Contexts *)
 
 Section Contexts.
+
   Context {V : Type}.
   Inductive J :=
   | J_app_l : tm V → J   (* [] M *)
@@ -216,11 +228,44 @@ Inductive C {V} :=
 Arguments C V : clear implicits.
 
 
+Section Plugs.
 
-(* Reduction *)
+  Local Coercion tm_val : val >-> tm.
+  Local Coercion tm_non : non >-> tm.
 
-Reserved Notation "M '-->' N" (at level 40).
-Inductive step : term -> term -> Prop :=
-| step_beta_v : forall M V,
-  <{ (λ M) V }> --> <{ M [0 := V] }>
-.
+  Definition plug_J {V} (j : J V) (M : tm V) : non V :=
+    match j with
+    | J_app_l M => non_app   M M
+    | J_app_r V => non_app   V M
+    | J_S₀    M => non_reset M M
+    end.
+
+  Definition map_J {A B : Type} (f : A → B) (j : J A) : J B :=
+    match j with
+    | J_app_l M => J_app_l (map     f M)
+    | J_app_r V => J_app_r (map_val f V)
+    | J_S₀    M => J_S₀    (map     f M)
+    end.
+
+End Plugs.
+
+
+Section Reduction.
+
+  Local Coercion tm_val : val >-> tm.
+  Local Coercion tm_non : non >-> tm.
+  Notation "↑ e" := (map Some e) (at level 70). (* lift variables by one level *)
+
+  Inductive contr : term → term → Prop :=
+  | contr_β_val : ∀ M   (V : value), contr <{ (λ M) V }> (sub M V)
+  | contr_η_val : ∀     (V : value), contr <{ λ {↑V} 0 }> V
+  | contr_β_let : ∀ M   (V : value), contr <{ let V in M }> (sub M V)
+  | contr_η_let : ∀ M              , contr <{ let M in 0 }> M
+  | contr_β_dol : ∀   (W V : value), contr <{ V $ S₀ W }> <{ W V }>
+  | contr_η_dol : ∀     (V : value), contr <{ S₀λ 0 {↑V} }> V
+  | contr_D_val : ∀   (W V : value), contr <{ V $    W }> <{ V W }>
+  | contr_D_let : ∀ M N (V : value), contr <{ V $ let M in N }> <{ (λ {↑V} $ N) $ M }>
+  | contr_assoc : ∀ M N L          , contr <{ let (let L in M) in N }> <{ let L in let M in {↑N} }>
+  | contr_name  : ∀ J P            , contr (plug_J J P) <{ let P in {plug_J (map_J Some J) <{ 0 }>} }>
+  .
+End Reduction.
