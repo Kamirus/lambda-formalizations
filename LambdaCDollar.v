@@ -159,7 +159,6 @@ with bind_non {A B : Type} (f : A → val B) (e : non A) : non B :=
 Notation bind_is_map_for F Bind := (λ A e,
   ∀ B (f : A → B), F f e = Bind (λ v, val_var (f v)) e
 ).
-
 Lemma bind_is_map : ∀ A e, bind_is_map_for map bind A e.
 Proof.
   cbn; apply (tm_mut
@@ -167,6 +166,24 @@ Proof.
     (bind_is_map_for map_val bind_val)
     (bind_is_map_for map_non bind_non)); crush;
     (rewrite H + rewrite H0); f_equal; apply functional_extensionality; crush_option.
+Qed.
+
+Notation bind_map_law_for F Bind := (λ A e,
+  ∀ B C (f:A → B) (g:B → val C),
+    Bind g (F f e) = Bind (λ a, g (f a)) e
+).
+Lemma bind_map_law : ∀ A e, bind_map_law_for fmap bind A e.
+Proof.
+  cbn; apply (tm_mut
+    (bind_map_law_for map bind)
+    (bind_map_law_for map_val bind_val)
+    (bind_map_law_for map_non bind_non)); crush;
+    (rewrite H + rewrite H0); f_equal; apply functional_extensionality; crush_option.
+Qed.
+
+Lemma bind_id_law : ∀ A (M:tm A), bind val_var M = M.
+Proof.
+  intros. rewrite <- bind_is_map. apply map_id_law. auto.
 Qed.
 
 (* Notation bind_law_for Bind := (λ A e,
@@ -192,14 +209,14 @@ Notation "↥ V" := (tm_val (↑(V : val _))) (at level 2).
 
 (* Substitution *)
 
-Definition sub_var {A} (e': val A) (v:^A) : val A :=
+Definition sub_var {A} (N: val A) (v:^A) : val A :=
   match v with
-  | None => e'
+  | None => N
   | Some v => val_var v
   end.
 
-Definition sub {A} (e:tm ^A) (e':val A) : tm A :=
-  bind (sub_var e') e.
+Definition sub {A} (M:tm ^A) (N:val A) : tm A :=
+  bind (sub_var N) M.
 
 Lemma sub_app : ∀ A M N (V : val A),
   sub <{ M N }> V = <{ {sub M V} {sub N V} }>.
@@ -224,11 +241,8 @@ Ltac ind2 M := (
 Lemma sub_nop : ∀ A M (V : val A),
   sub (↑M) V = M.
 Proof.
-  ind M (λ A (M : tm A), ∀ V, sub (↑M) V = M); intros; auto.
-  admit.
-  (* set (P := _).  HOW TO CREATE A FRESH UNIFICATION VARIABLE?? *)
-(* Qed. *)
-Admitted.
+  cbn; intros. rewrite bind_map_law. cbn. apply bind_id_law.
+Qed.
 
 (* Examples *)
 
@@ -245,9 +259,9 @@ Section Contexts.
 
   Context {A : Type}.
   Inductive J :=
-  | J_app_l : tm A → J   (* [] M *)
+  | J_app_l : tm  A → J  (* [] M *)
   | J_app_r : val A → J  (* V [] *)
-  | J_S0 : tm A → J      (* []$M *)
+  | J_dol   : tm  A → J  (* []$M *)
   .
   Inductive K :=
   | K_empty : K
@@ -277,10 +291,20 @@ Definition map_J {A B : Type} (f : A → B) (j : J A) : J B :=
   match j with
   | J_app_l M => J_app_l (map     f M)
   | J_app_r V => J_app_r (map_val f V)
-  | J_S0    M => J_S0    (map     f M)
+  | J_dol   M => J_dol   (map     f M)
   end.
 
 Instance Map_J : Functor J := { fmap := @map_J }.
+
+
+Fixpoint map_K {A B : Type} (f : A → B) (k : K A) : K B :=
+  match k with
+  | K_empty => K_empty
+  | K_JK j k => K_JK (map_J f j) (map_K f k)
+  | K_let k M => K_let (map_K f k) (fmap (option_map f) M)
+  end.
+
+Instance Map_K : Functor K := { fmap := @map_K }.
 
 
 
@@ -293,7 +317,7 @@ Section Plugs.
     match j with
     | J_app_l M' => non_app   M M'
     | J_app_r V  => non_app   V M
-    | J_S0    M' => non_reset M M'
+    | J_dol   M' => non_reset M M'
     end.
 
   Fixpoint plug_K {A} (k : K A) (M : tm A) : tm A :=
@@ -418,13 +442,13 @@ Proof.
   intros; apply (contr_name A (J_app_r V) P).
   Qed.
 
-Lemma contr_name_S0 : ∀ A (M : tm A) (P : non A),
+Lemma contr_name_dol : ∀ A (M : tm A) (P : non A),
   <{ {tm_non P} $ M }> --> <{ let {tm_non P} in 0 $ {↑M} }>.
 Proof.
-  intros; apply (contr_name A (J_S0 M) P).
+  intros; apply (contr_name A (J_dol M) P).
   Qed.
 (* Instantiations of contr_name for every case of J *)
-Global Hint Resolve contr_name_app_l contr_name_app_r contr_name_S0 : core.
+Global Hint Resolve contr_name_app_l contr_name_app_r contr_name_dol : core.
 
 Lemma value_reduces : ∀ A (V : val A) M,
   tm_val V --> M →
@@ -495,3 +519,10 @@ Proof.
     (* econstructor. apply contr_η_val. constructor.  *)
 Admitted.
 
+
+(* V $ K[M] = (λ x. V $ K[x]) $ M *)
+Lemma L_4_8 : ∀ A (M : tm A) V k,
+  <{ (λ {↥V} $ {↑k}[0]) $ M }> -->* <{ {tm_val V} $ k[M] }>.
+Proof.
+  intro A. 
+Qed.
