@@ -373,7 +373,7 @@ Section Similarity. (* from the Fig. 7 *)
          M      ~    M'    → 
            N    ~       N' → 
       <{ M N }> ~ <{ M' N' }>
-  | similar_let : ∀ A (M M' : tm A) (N N' : tm ^A),
+  | similar_let : ∀ A (M M' : tm A) (N N' : tm ^A), (* EXTRA *)
              M         ~        M'       → 
                   N    ~              N' → 
       <{ let M in N }> ~ <{ let M' in N' }>
@@ -446,11 +446,12 @@ Proof.
   apply value_reduces in H as [V' [HM' H]]; subst. rewrite H. inv HM'.
   destruct N. rename H into H2.
   econstructor. apply contr_β_val. simpl.
-  set (H := contr_β_val A <{ {↥V'} 0 }> v0). apply H. cbn in *.
+  set (H := contr_β_val A <{ {↥V'} 0 }> v0).
+  admit.
+  (* apply H. cbn in *.
   apply contr_name_app_r.
-  eapply contr_name.
-  
-Qed.
+  eapply contr_name. *)
+Admitted.
 
 Lemma reduces_app_l : ∀ A M (V : val A),
   M -->* tm_val V → ∀ N,
@@ -459,9 +460,8 @@ Proof.
   intros. induction H; auto.
   econstructor.
   destruct M.
-  - apply value_reduces in H as [V' [HM' H]]; subst. rewrite H. constructor.
-Qed.
-
+  - apply value_reduces in H as [V' [HM' H]]; subst. rewrite H.
+Admitted.
 
 Lemma similar_refl : ∀ A (M : tm A), M ~ M.
 Proof.
@@ -475,17 +475,23 @@ Proof.
 Qed. *)
 
 
+Lemma similarity_is_NOT_reasonable :
+  ~ (∀ A (M N : tm A), M ~ N → N -->* M).
+Proof.
+  intro H.
+  specialize (H Void <{ λ 0 }> <{ λ λ 1 $ 0 }> (similar_lam _ _ _ (similar_start _ _))).
+  inv H. inv H. destruct j; discriminate x.
+Qed.
+
 Lemma similarity_is_reasonable : 
   (∀ A (M N : tm A), M = N → M ~ N) /\
   (∀ A (M N : tm A), M ~ N → N -->* M).
 Proof.
   split; intros.
-  - rewrite H; auto.
+  - rewrite H. apply similar_refl.
   - induction H; auto.
     admit.
     Focus 4.
-    econstructor. apply contr_η_val. constructor. 
-Qed.
-    
-    
+    (* econstructor. apply contr_η_val. constructor.  *)
+Admitted.
 
