@@ -13,9 +13,10 @@ Class Functor (F : Type → Type) :=
   { fmap : ∀ {A B}, (A → B) → F A → F B
 
   (** Functor laws **)
-  (* ; fmap_identity : ∀ A (x : F A), fmap id x = x *)
-  (* ; fmap_composition : 
-      ∀ A B C (f : B → C) (g : A → B) (x : F A), fmap (f ∘ g) x = (fmap f ∘ fmap g) x *)
+  ; fmap_identity : ∀ A (x : F A) (f : A → A),
+      (∀ x, f x = x) → fmap f x = x
+  ; fmap_composition : 
+      ∀ A B C (f : B → C) (g : A → B) (x : F A), fmap (f ∘ g) x = fmap f (fmap g x)
   }.
 
 Inductive step {T} {contr : T → T → Prop} : T → T → Prop :=

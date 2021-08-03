@@ -83,54 +83,83 @@ with map_non {A B : Type} (f : A → B) (e : non A) : non B :=
   | non_reset e1 e2 => non_reset (map f e1) (map f e2)
   end.
 
-Notation map_id_law_for F := (λ A e,
-  ∀ (f : A → A),
-    (∀ x, f x = x) →
-    F f e = e
-).
-
-Instance Map_tm  : Functor tm  := { fmap := @map }.
-Instance Map_val : Functor val := { fmap := @map_val }.
-Instance Map_non : Functor non := { fmap := @map_non }.
-
 Ltac crush := 
   intros; cbn; f_equal; auto.
+
+Ltac apply_something :=
+  match goal with
+  | H : _, H0: _ |- _ => apply H + apply H0
+  | H : _ |- _ => apply H
+  end.
 
 Ltac crush_option := 
   let x := fresh "x" in
   intros [x|]; cbn; f_equal; auto.
 
-Lemma map_id_law : ∀ A e, map_id_law_for map A e.
-Proof.
-  cbn; apply (tm_mut
+Ltac ext_crush_option :=
+  f_equal; apply functional_extensionality; crush_option.
+
+Ltac prove MUT A B C :=
+  cbn; apply (MUT A B C); crush.
+
+
+Notation map_id_law_for F := (λ A e,
+  ∀ (f : A → A),
+    (∀ x, f x = x) →
+    F f e = e
+).
+Ltac prove_map_id_law MUT :=
+  prove MUT
     (map_id_law_for map)
     (map_id_law_for map_val)
-    (map_id_law_for map_non)); crush;
-  (apply H + apply H0); crush_option.
-Qed.
-
-Notation map_comp_law_for F := (λ A e,
-  ∀ B C (f : A → B) (g : B → C),
-    F g (F f e) = F (g ∘ f) e
-).
+    (map_id_law_for map_non); apply_something; crush_option.
+Lemma map_id_law     : ∀ A e, map_id_law_for map     A e. Proof. prove_map_id_law  tm_mut. Qed.
+Lemma map_id_law_val : ∀ A e, map_id_law_for map_val A e. Proof. prove_map_id_law val_mut. Qed.
+Lemma map_id_law_non : ∀ A e, map_id_law_for map_non A e. Proof. prove_map_id_law non_mut. Qed.
 
 Lemma option_map_comp : ∀ A B C (f : A → B) (g : B → C),
   option_map (g ∘ f) = option_map g ∘ option_map f.
 Proof.
-  intros. apply functional_extensionality. crush_option.
+  intros. ext_crush_option.
 Qed.
 
-Lemma map_comp_law : ∀ A e, map_comp_law_for map A e.
-Proof.
-  cbn; apply (tm_mut
+Notation map_comp_law_for F := (λ A e,
+  ∀ B C (f : A → B) (g : B → C),
+    F (g ∘ f) e = F g (F f e)
+).
+Ltac prove_map_comp_law MUT :=
+  prove MUT
     (map_comp_law_for map)
     (map_comp_law_for map_val)
-    (map_comp_law_for map_non)); crush;
-  rewrite option_map_comp;
-  (apply H + apply H0); crush_option.
-Qed.
+    (map_comp_law_for map_non); rewrite option_map_comp; apply_something; crush_option.
+Lemma map_comp_law     : ∀ A e, map_comp_law_for map     A e. Proof. prove_map_comp_law  tm_mut. Qed.
+Lemma map_comp_law_val : ∀ A e, map_comp_law_for map_val A e. Proof. prove_map_comp_law val_mut. Qed.
+Lemma map_comp_law_non : ∀ A e, map_comp_law_for map_non A e. Proof. prove_map_comp_law non_mut. Qed.
+
+Instance Map_tm  : Functor tm  :=
+  { fmap := @map
+  ; fmap_identity := @map_id_law
+  ; fmap_composition := λ A B C f g x, map_comp_law A x B C g f
+  }.
+Instance Map_val : Functor val :=
+  { fmap := @map_val
+  ; fmap_identity := @map_id_law_val
+  ; fmap_composition := λ A B C f g x, map_comp_law_val A x B C g f
+  }.
+Instance Map_non : Functor non :=
+  { fmap := @map_non
+  ; fmap_identity := @map_id_law_non
+  ; fmap_composition := λ A B C f g x, map_comp_law_non A x B C g f
+  }.
 
 (* Bind *)
+
+Class Subst (F : Type → Type) `{Functor F} :=
+  { bind : ∀ {A B}, (A → val B) → F A → F B
+  ; bind_is_map : ∀ {A B} (f:A → B) e, fmap f e = bind (λ v, val_var (f v)) e
+  ; bind_map_law : ∀ {A B C} (f:A → B) (g:B → val C) e,
+      bind g (fmap f e) = bind (λ a, g (f a)) e
+  }.
 
 Definition option_bind {A B} (f: A → val B) (o: ^A) : val ^B :=
   match o with
@@ -138,7 +167,7 @@ Definition option_bind {A B} (f: A → val B) (o: ^A) : val ^B :=
   | Some a => map_val Some (f a)
   end.
 
-Fixpoint bind {A B : Type} (f : A → val B) (e : tm A) : tm B :=
+Fixpoint bind_tm {A B : Type} (f : A → val B) (e : tm A) : tm B :=
   match e with
   | tm_val t => tm_val (bind_val f t)
   | tm_non t => tm_non (bind_non f t)
@@ -146,51 +175,70 @@ Fixpoint bind {A B : Type} (f : A → val B) (e : tm A) : tm B :=
 with bind_val {A B : Type} (f : A → val B) (e : val A) : val B :=
   match e with
   | val_var v => f v
-  | val_lam e => val_lam (bind (option_bind f) e)
+  | val_lam e => val_lam (bind_tm (option_bind f) e)
   | val_S₀    => val_S₀
   end
 with bind_non {A B : Type} (f : A → val B) (e : non A) : non B :=
   match e with
-  | non_app e1 e2 => non_app (bind f e1) (bind f e2)
-  | non_let e1 e2 => non_let (bind f e1) (bind (option_bind f) e2)
-  | non_reset e1 e2 => non_reset (bind f e1) (bind f e2)
+  | non_app e1 e2 => non_app (bind_tm f e1) (bind_tm f e2)
+  | non_let e1 e2 => non_let (bind_tm f e1) (bind_tm (option_bind f) e2)
+  | non_reset e1 e2 => non_reset (bind_tm f e1) (bind_tm f e2)
   end.
 
-Notation bind_is_map_for F Bind := (λ A e,
-  ∀ B (f : A → B), F f e = Bind (λ v, val_var (f v)) e
+Notation bind_is_map_for Bind := (λ A e,
+  ∀ B (f : A → B), fmap f e = Bind (λ v, val_var (f v)) e
 ).
-Lemma bind_is_map : ∀ A e, bind_is_map_for map bind A e.
-Proof.
-  cbn; apply (tm_mut
-    (bind_is_map_for map bind)
-    (bind_is_map_for map_val bind_val)
-    (bind_is_map_for map_non bind_non)); crush;
-    (rewrite H + rewrite H0); f_equal; apply functional_extensionality; crush_option.
-Qed.
+Ltac prove_bind_is_map MUT H H0 :=
+  prove MUT
+    (bind_is_map_for bind_tm)
+    (bind_is_map_for bind_val)
+    (bind_is_map_for bind_non); 
+    (rewrite H + rewrite H0); ext_crush_option.
+Lemma bind_is_map_tm  : ∀ A e, bind_is_map_for bind_tm  A e. Proof. prove_bind_is_map  tm_mut H H0. Qed.
+Lemma bind_is_map_val : ∀ A e, bind_is_map_for bind_val A e. Proof. prove_bind_is_map val_mut H H0. Qed.
+Lemma bind_is_map_non : ∀ A e, bind_is_map_for bind_non A e. Proof. prove_bind_is_map non_mut H H0. Qed.
 
-Notation bind_map_law_for F Bind := (λ A e,
+Notation bind_map_law_for Bind := (λ A e,
   ∀ B C (f:A → B) (g:B → val C),
-    Bind g (F f e) = Bind (λ a, g (f a)) e
+    Bind g (fmap f e) = Bind (λ a, g (f a)) e
 ).
-Lemma bind_map_law : ∀ A e, bind_map_law_for fmap bind A e.
-Proof.
-  cbn; apply (tm_mut
-    (bind_map_law_for map bind)
-    (bind_map_law_for map_val bind_val)
-    (bind_map_law_for map_non bind_non)); crush;
-    (rewrite H + rewrite H0); f_equal; apply functional_extensionality; crush_option.
-Qed.
+Ltac prove_bind_map_law MUT H H0 :=
+  prove MUT
+    (bind_map_law_for bind_tm)
+    (bind_map_law_for bind_val)
+    (bind_map_law_for bind_non); 
+    (rewrite H + rewrite H0); ext_crush_option.
+Lemma bind_map_law_tm  : ∀ A e, bind_map_law_for bind_tm  A e. Proof. prove_bind_map_law  tm_mut H H0. Qed.
+Lemma bind_map_law_val : ∀ A e, bind_map_law_for bind_val A e. Proof. prove_bind_map_law val_mut H H0. Qed.
+Lemma bind_map_law_non : ∀ A e, bind_map_law_for bind_non A e. Proof. prove_bind_map_law non_mut H H0. Qed.
 
-Lemma bind_id_law : ∀ A (M:tm A), bind val_var M = M.
+
+Lemma bind_id_law : ∀ {F} `{Subst F} A (M:F A), bind val_var M = M.
 Proof.
-  intros. rewrite <- bind_is_map. apply map_id_law. auto.
+  intros. rewrite <- bind_is_map. apply fmap_identity. auto.
 Qed.
 
 (* Notation bind_law_for Bind := (λ A e,
   ∀ B C (f:A → val B) (g:B → val C),
     Bind g (Bind f e) = Bind (λ a, Bind g (f a)) e
 ).
-Lemma bind_law : ∀ A e, bind_law_for bind A e. *)
+Lemma bind_law : ∀ A e, bind_law_for bind_tm A e. *)
+
+Instance Bind_tm  : Subst tm  :=
+  { bind := @bind_tm
+  ; bind_is_map := λ A B f e, bind_is_map_tm A e B f
+  ; bind_map_law := λ A B C f g e, bind_map_law_tm A e B C f g
+  }.
+Instance Bind_val : Subst val := 
+  { bind := @bind_val
+  ; bind_is_map := λ A B f e, bind_is_map_val A e B f
+  ; bind_map_law := λ A B C f g e, bind_map_law_val A e B C f g
+  }.
+Instance Bind_non : Subst non := 
+  { bind := @bind_non
+  ; bind_is_map := λ A B f e, bind_is_map_non A e B f
+  ; bind_map_law := λ A B C f g e, bind_map_law_non A e B C f g
+  }.
 
 (* Closed terms *)
 
@@ -206,6 +254,12 @@ Definition lift {F : Type → Type} {A : Type} `{Functor F} : F A → F ^A := fm
 Notation "↑ e" := (lift e) (at level 2).
 Notation "↥ V" := (tm_val (↑(V : val _))) (at level 2).
 
+Lemma val_lift_is_lift_val : ∀ A (V:val A),
+  ↥V = ↑(tm_val V).
+Proof.
+  auto.
+Qed.
+
 
 (* Substitution *)
 
@@ -215,19 +269,10 @@ Definition sub_var {A} (N: val A) (v:^A) : val A :=
   | Some v => val_var v
   end.
 
-Definition sub {A} (M:tm ^A) (N:val A) : tm A :=
+Definition sub {F A} `{Subst F} (M:F ^A) (N:val A) : F A :=
   bind (sub_var N) M.
 
-Lemma sub_app : ∀ A M N (V : val A),
-  sub <{ M N }> V = <{ {sub M V} {sub N V} }>.
-Proof. auto. Qed.
-
 Ltac ind M PP := (induction M using tm_mut with
-  (P  := λ A M, PP A M)
-  (P1 := λ A Q, PP A (tm_non Q))
-  (P0 := λ A V, PP A (tm_val V))).
-
-Ltac ind1 M PP := (induction M using tm_mut with
   (P  := λ A M, PP A M)
   (P1 := λ A Q, PP A (tm_non Q))
   (P0 := λ A V, PP A (tm_val V))).
@@ -237,12 +282,6 @@ Ltac ind2 M := (
   (P  := λ A M, ?PP A M)
   (P1 := λ A Q, ?PP A (tm_non Q))
   (P0 := λ A V, ?PP A (tm_val V))).
-
-Lemma sub_nop : ∀ A M (V : val A),
-  sub (↑M) V = M.
-Proof.
-  cbn; intros. rewrite bind_map_law. cbn. apply bind_id_law.
-Qed.
 
 (* Examples *)
 
@@ -294,8 +333,36 @@ Definition map_J {A B : Type} (f : A → B) (j : J A) : J B :=
   | J_dol   M => J_dol   (map     f M)
   end.
 
-Instance Map_J : Functor J := { fmap := @map_J }.
+Lemma map_id_law_J : ∀ A e, map_id_law_for map_J A e.
+Proof. cbn. intros A. induction e; crush; (apply map_id_law + apply map_id_law_val); auto. Qed.
 
+Lemma map_comp_law_J : ∀ A e, map_comp_law_for map_J A e.
+Proof. cbn; intros A; induction e; crush; (apply map_comp_law + apply map_comp_law_val); auto. Qed.
+
+Instance Map_J : Functor J :=
+  { fmap := @map_J
+  ; fmap_identity := @map_id_law_J
+  ; fmap_composition := λ A B C f g x, map_comp_law_J A x B C g f
+  }.
+
+Definition bind_J {A B : Type} (f : A → val B) (j : J A) : J B :=
+  match j with
+  | J_app_l M => J_app_l (bind f M)
+  | J_app_r V => J_app_r (bind f V)
+  | J_dol   M => J_dol   (bind f M)
+  end.
+
+Lemma bind_is_map_J : ∀ A e, bind_is_map_for bind_J A e.
+Proof. cbn. intros A. induction e; crush; (apply bind_is_map_tm + apply bind_is_map_val). Qed.
+
+Lemma bind_map_law_J : ∀ A e, bind_map_law_for bind_J A e.
+Proof. cbn. intros A. induction e; crush; (apply bind_map_law_tm + apply bind_map_law_val). Qed.
+
+Instance Bind_J : Subst J :=
+  { bind := @bind_J
+  ; bind_is_map := λ A B f e, bind_is_map_J A e B f
+  ; bind_map_law := λ A B C f g e, bind_map_law_J A e B C f g
+  }.
 
 Fixpoint map_K {A B : Type} (f : A → B) (k : K A) : K B :=
   match k with
@@ -304,8 +371,36 @@ Fixpoint map_K {A B : Type} (f : A → B) (k : K A) : K B :=
   | K_let k M => K_let (map_K f k) (fmap (option_map f) M)
   end.
 
-Instance Map_K : Functor K := { fmap := @map_K }.
+Lemma map_id_law_K : ∀ A e, map_id_law_for map_K A e.
+Proof. cbn. intros A. induction e; crush. apply map_id_law_J; auto. apply map_id_law; crush_option. Qed.
 
+Lemma map_comp_law_K : ∀ A e, map_comp_law_for map_K A e.
+Proof. cbn; intros A; induction e; crush. apply map_comp_law_J; auto. rewrite option_map_comp. apply map_comp_law. Qed.
+
+Instance Map_K : Functor K :=
+  { fmap := @map_K
+  ; fmap_identity := @map_id_law_K
+  ; fmap_composition := λ A B C f g x, map_comp_law_K A x B C g f
+  }.
+
+Fixpoint bind_K {A B : Type} (f : A → val B) (k : K A) : K B :=
+  match k with
+  | K_empty => K_empty
+  | K_JK j k => K_JK (bind f j) (bind_K f k)
+  | K_let k M => K_let (bind_K f k) (bind (option_bind f) M)
+  end.
+
+Lemma bind_is_map_K : ∀ A e, bind_is_map_for bind_K A e.
+Proof. cbn. intros A. induction e; crush. apply bind_is_map_J. rewrite bind_is_map_tm. ext_crush_option. Qed.
+
+Lemma bind_map_law_K : ∀ A e, bind_map_law_for bind_K A e.
+Proof. cbn. intros A. induction e; crush. apply bind_map_law_J. rewrite bind_map_law_tm. ext_crush_option. Qed.
+
+Instance Bind_K : Subst K :=
+  { bind := @bind_K
+  ; bind_is_map := λ A B f e, bind_is_map_K A e B f
+  ; bind_map_law := λ A B C f g e, bind_map_law_K A e B C f g
+  }.
 
 
 Section Plugs.
@@ -341,6 +436,51 @@ Notation "C [ M ]" := (plug C M)
    M custom λc_dollar_scope at level 99).
 
 (* Set Typeclasses Debug. *)
+
+
+(* Sub Utils *)
+
+Definition sub_tm  {A} : tm  ^A → val A → tm  A := sub.
+Definition sub_val {A} : val ^A → val A → val A := sub.
+Definition sub_non {A} : non ^A → val A → non A := sub.
+
+Lemma sub_app : ∀ A M N (V : val A),
+  sub <{ M N }> V = <{ {sub M V} {sub N V} }>.
+Proof. auto. Qed.
+
+Lemma sub_dol : ∀ A M N (V : val A),
+  sub <{ M $ N }> V = <{ {sub M V} $ {sub N V} }>.
+Proof. auto. Qed.
+
+Lemma sub_K_JK : ∀ A j k (V : val A),
+  sub (K_JK j k) V = K_JK (sub j V) (sub k V).
+Proof. auto. Qed.
+
+Lemma plug_K_JK : ∀ A j k (M : tm A),
+  <{ {K_JK j k}[M] }> = <{ j [ k [ M ] ] }>.
+Proof. cbn. auto. Qed.
+
+Lemma sub_nop : ∀ {F} `{Subst F} A (M : F A) (V : val A),
+  sub (↑M) V = M.
+Proof. unfold sub. unfold lift. intros. rewrite bind_map_law. cbn. apply bind_id_law. Qed.
+
+Ltac simp :=
+  repeat (
+    rewrite sub_app +
+    rewrite sub_dol + 
+    rewrite plug_K_JK + 
+    rewrite sub_K_JK
+  );
+  repeat rewrite sub_nop.
+
+
+(* Lemma sub_plug : ∀ {C} `{Plug C} `{Subst C} A (c : C _) M (V : val A), *)
+Lemma sub_plug_K : ∀ A (k : K _) M (V : val A),
+  sub (plug k M) V = plug (sub k V) (sub M V).
+Proof.
+  intros A. induction k; intros; auto; simp. rewrite <- IHk.
+Admitted. (*TODO*)
+
 
 
 Section Reduction.
@@ -522,7 +662,10 @@ Admitted.
 
 (* V $ K[M] = (λ x. V $ K[x]) $ M *)
 Lemma L_4_8 : ∀ A (M : tm A) V k,
-  <{ (λ {↥V} $ {↑k}[0]) $ M }> -->* <{ {tm_val V} $ k[M] }>.
+  <{ (λ {↑ (tm_val V)} $ {↑k}[0]) $ M }> -->* <{ {tm_val V} $ k[M] }>.
 Proof.
-  intro A. 
+  intros A M.
+  ind M (λ A (M:tm A), ∀ V k, <{ (λ {↑ (tm_val V)} $ {↑k}[0]) $ M }> -->* <{ {tm_val V} $ k[M] }>);
+  intros; auto.
+  econstructor. constructor. econstructor. constructor. simp. simp. rewrite sub_nop. 
 Qed.
