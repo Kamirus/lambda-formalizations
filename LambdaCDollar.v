@@ -479,7 +479,7 @@ Lemma similarity_is_NOT_reasonable :
   ~ (∀ A (M N : tm A), M ~ N → N -->* M).
 Proof.
   intro H.
-  specialize (H Void <{ λ 0 }> <{ λ λ 1 $ 0 }> (similar_lam _ _ _ (similar_start _ _))).
+  specialize (H ^Void <{ 0 }> <{ λ 1 $ 0 }> (similar_start _ _)).
   inv H. inv H. destruct j; discriminate x.
 Qed.
 
