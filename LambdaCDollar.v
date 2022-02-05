@@ -479,7 +479,7 @@ Lemma sub_plug_K : ∀ A (k : K _) M (V : val A),
   sub (plug k M) V = plug (sub k V) (sub M V).
 Proof.
   intros A. induction k; intros; auto; simp. rewrite <- IHk.
-Admitted. (*TODO*)
+Admitted. (* TODO *)
 
 
 
