@@ -91,8 +91,10 @@ Definition val_to_tm {A} (v : val A) :=
   end.
 
 Inductive Void : Type := .
-Definition term := tm Void.
-Definition value := val Void.
+Notation "␀" := (Void).
+Definition term := tm ␀.
+Definition value := val ␀.
+Definition from_void {A} (v : ␀) : A := match v with end.
 
 
 Definition var_subst {V} e' (v:^V) :=
@@ -148,16 +150,23 @@ Section Contexts.
   Fixpoint plugK k e :=
     match k with
     | K_nil => e
-    | K_cons j k' => plugK k' (plugJ j e)
+    (* | K_cons j k' => plugK k' (plugJ j e) *)
+    | K_cons j k' => plugJ j (plugK k' e)
     end.
   
   Fixpoint plugT trail e :=
     match trail with
     | T_nil => e
-    | T_cons v k t => plugT t <{ {val_to_tm v} $ {plugK k e} }>
+    (* | T_cons v k t => plugT t <{ {val_to_tm v} $ {plugK k e} }> *)
+    | T_cons v k t => <{ {val_to_tm v} $ {plugK k (plugT t e)} }>
     end.
 
-  (* TODO decompose *)
+  Definition redex_to_term r := 
+    match r with
+    | redex_beta   v1 v2 => tm_app (val_to_tm v1) (val_to_tm v2)
+    | redex_dollar v1 v2 => tm_dol (val_to_tm v1) (val_to_tm v2)
+    | redex_shift v k e  => tm_dol (val_to_tm v) (plugK k <{ S₀ e }>)
+    end.
 
 End Contexts.
 Arguments J A : clear implicits.
@@ -166,7 +175,73 @@ Arguments T A : clear implicits.
 Arguments redex A : clear implicits.
 Arguments dec A : clear implicits.
 
+Definition K_fun {A} k e := @K_cons A (J_fun e) k.
+Definition K_arg {A} v k := @K_cons A (J_arg v) k.
+Definition K_dol {A} k e := @K_cons A (J_dol e) k.
+(* Notation "'K_fun' k e" := (K_cons (J_fun e) k) (at level 10, left associativity). *)
+(* Notation "'K_arg' v k" := (K_cons (J_arg v) k) (at level 10, left associativity). *)
+(* Notation "'K_dol' k e" := (K_cons (J_dol e) k) (at level 10, left associativity). *)
 
+Lemma decomposition : ∀ e : tm ␀, 
+  (∃ v, e = val_to_tm v) \/
+  (∃ k e', e = plugK k <{ S₀ e' }>) \/
+  (∃ k t r, e = plugK k (plugT t (redex_to_term r))).
+Proof with repeat eexists.
+  dependent induction e.
+  - inversion a.
+  - left. exists (val_abs e); auto.
+  - right. left. exists K_nil. exists e. auto.
+  - right; destruct IHe1 with e1 as [[v1 H1] | [[k [e' H1]] | [k [t [r H1]]]]]; auto; clear IHe1; subst.
+    destruct IHe2 with e2 as [[v2 H2] | [[k [e' H2]] | [k [t [r H2]]]]]; auto; clear IHe2; subst.
+    right. exists (K_nil). exists T_nil. exists (redex_beta v1 v2). reflexivity.
+    left.  exists (K_arg v1 k)...
+    right. exists (K_arg v1 k)...
+    left.  exists (K_fun k e2)...
+    right. exists (K_fun k e2)...
+  - right; destruct IHe1 with e1 as [[v1 H1] | [[k [e' H1]] | [k [t [r H1]]]]]; auto; clear IHe1; subst.
+    destruct IHe2 with e2 as [[v2 H2] | [[k [e' H2]] | [k [t [r H2]]]]]; auto; clear IHe2; subst.
+    right. exists (K_nil). exists T_nil. exists (redex_dollar v1 v2). reflexivity.
+    right. exists (K_nil). exists T_nil. exists (redex_shift v1 k e'). reflexivity.
+    right. exists (K_nil). exists (T_cons v1 k t)...
+    left.  exists (K_dol k e2)...
+    right. exists (K_dol k e2)...
+Qed.
 
+Fixpoint decompose (e : tm ␀) : dec ␀.
+refine (
+  match e with
+  | <{ var a }> => from_void a
+  | <{ λ  e' }> => dec_value (val_abs e')
+  | <{ S₀ e' }> => dec_stuck K_nil e'
+  | <{ e1   e2 }> =>
+    match decompose e1 with
+    | dec_stuck k e' => dec_stuck (K_fun k e2) e'
+    | dec_value v1 => _
+    | dec_redex k t r => _
+    end
+  | <{ e1 $ e2 }> =>
+    match decompose e1 with
+    | dec_stuck k e' => dec_stuck (K_dol k e2) e'
+    | dec_value v1 => _
+    | dec_redex k t r => _
+    end
+  end).
+Admitted.
 
-Inductive redex
+(* Fixpoint decompose_e (k : K ␀) (e : tm ␀) : dec ␀ :=
+  match e with
+  | <{ var a }> => from_void a
+  | <{ λ  e' }> => decompose_K (val_abs e') k
+  | <{ S₀ e' }> => dec_stuck k e'
+  | <{ e1   e2 }> => decompose_e (K_fun k e2) e1
+  | <{ e1 $ e2 }> => decompose_e (K_dol k e2) e1
+  end
+with decompose_K (v : val ␀) (k : K ␀) : dec ␀ :=
+  match k with
+  | K_nil => dec_value v
+  | K_cons (J_fun e2) k1 => decompose_e (K_arg v k1) e2
+  | K_cons (J_arg v1) k2 => dec_redex k2 T_nil (redex_beta v1 v)
+  | K_cons (J_dol e2) k1 => todo
+  end
+. *)
+
