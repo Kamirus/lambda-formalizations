@@ -182,50 +182,79 @@ Definition K_dol {A} k e := @K_cons A (J_dol e) k.
 (* Notation "'K_arg' v k" := (K_cons (J_arg v) k) (at level 10, left associativity). *)
 (* Notation "'K_dol' k e" := (K_cons (J_dol e) k) (at level 10, left associativity). *)
 
-Lemma decomposition : ∀ e : tm ␀, 
-  (∃ v, e = val_to_tm v) \/
-  (∃ k e', e = plugK k <{ S₀ e' }>) \/
-  (∃ k t r, e = plugK k (plugT t (redex_to_term r))).
-Proof with repeat eexists.
-  dependent induction e.
-  - inversion a.
-  - left. exists (val_abs e); auto.
-  - right. left. exists K_nil. exists e. auto.
-  - right; destruct IHe1 with e1 as [[v1 H1] | [[k [e' H1]] | [k [t [r H1]]]]]; auto; clear IHe1; subst.
-    destruct IHe2 with e2 as [[v2 H2] | [[k [e' H2]] | [k [t [r H2]]]]]; auto; clear IHe2; subst.
-    right. exists (K_nil). exists T_nil. exists (redex_beta v1 v2). reflexivity.
-    left.  exists (K_arg v1 k)...
-    right. exists (K_arg v1 k)...
-    left.  exists (K_fun k e2)...
-    right. exists (K_fun k e2)...
-  - right; destruct IHe1 with e1 as [[v1 H1] | [[k [e' H1]] | [k [t [r H1]]]]]; auto; clear IHe1; subst.
-    destruct IHe2 with e2 as [[v2 H2] | [[k [e' H2]] | [k [t [r H2]]]]]; auto; clear IHe2; subst.
-    right. exists (K_nil). exists T_nil. exists (redex_dollar v1 v2). reflexivity.
-    right. exists (K_nil). exists T_nil. exists (redex_shift v1 k e'). reflexivity.
-    right. exists (K_nil). exists (T_cons v1 k t)...
-    left.  exists (K_dol k e2)...
-    right. exists (K_dol k e2)...
-Qed.
-
-Fixpoint decompose (e : tm ␀) : dec ␀.
-refine (
+Fixpoint decompose (e : tm ␀) : dec ␀ :=
   match e with
   | <{ var a }> => from_void a
   | <{ λ  e' }> => dec_value (val_abs e')
   | <{ S₀ e' }> => dec_stuck K_nil e'
   | <{ e1   e2 }> =>
     match decompose e1 with
-    | dec_stuck k e' => dec_stuck (K_fun k e2) e'
-    | dec_value v1 => _
-    | dec_redex k t r => _
+    | dec_stuck k e'  => dec_stuck (K_fun k e2) e'
+    | dec_redex k t r => dec_redex (K_fun k e2) t r
+    | dec_value v1    => 
+      match decompose e2 with
+      | dec_stuck k e'  => dec_stuck (K_arg v1 k) e'
+      | dec_redex k t r => dec_redex (K_arg v1 k) t r
+      | dec_value v2    => dec_redex (K_nil) T_nil (redex_beta v1 v2)
+      end
     end
   | <{ e1 $ e2 }> =>
     match decompose e1 with
-    | dec_stuck k e' => dec_stuck (K_dol k e2) e'
-    | dec_value v1 => _
-    | dec_redex k t r => _
+    | dec_stuck k e'  => dec_stuck (K_dol k e2) e'
+    | dec_redex k t r => dec_redex (K_dol k e2) t r
+    | dec_value v1    => 
+      match decompose e2 with
+      | dec_stuck k e'  => dec_redex K_nil (T_nil) (redex_shift v1 k e')
+      | dec_redex k t r => dec_redex K_nil (T_cons v1 k t) r
+      | dec_value v2    => dec_redex K_nil (T_nil) (redex_dollar v1 v2)
+      end
     end
-  end).
+  end.
+
+Lemma decompose_value_law : ∀ e v,
+  decompose e = dec_value v → e = val_to_tm v.
+Proof.
+  dependent inversion e; intros; cbn in *.
+  inversion v.
+  injection H; intros; subst; reflexivity.
+  inversion H.
+  remember (decompose t) as d; dependent induction d; try inversion H;
+  remember (decompose t0) as d0; dependent induction d0; try inversion H.
+  remember (decompose t) as d; dependent induction d; try inversion H;
+  remember (decompose t0) as d0; dependent induction d0; try inversion H.
+  Qed.
+
+Lemma decompose_stuck_law : ∀ k e e',
+  decompose e = dec_stuck k e' → e = plugK k <{ S₀ e' }>.
+Proof.
+  induction k; intros.
+
+  (* ḅase *)
+  inv e; cbn in *; 
+    try solve [inversion a | inversion H | injection H; intros; subst; reflexivity];
+    remember (decompose e1) as d1; inv d1; try solve [inversion H; auto];
+    remember (decompose e2) as d2; inv d2; try solve [inversion H; auto].
+
+  (* step *)
+  inv e; cbn in *; try solve [inversion a | inversion H; auto];
+  remember (decompose e1) as d1; inv d1.
+
+  - rewrite (decompose_value_law e1 v); auto.
+    remember (decompose e2) as d2; inv d2; inversion H; clear H; subst.
+    rewrite <- (IHk e2 e'); auto.
+  - inversion H; clear H; subst.
+    rewrite <- (IHk e1 e'); auto.
+  - inversion H.
+
+  - rewrite (decompose_value_law e1 v); auto.
+    remember (decompose e2) as d2; inv d2; inversion H.
+  - inversion H; clear H; subst.
+    rewrite <- (IHk e1 e'); auto.
+  - inversion H.
+  Qed.
+
+Lemma decompose_redex_law : ∀ e k t r,
+  decompose e = dec_redex k t r → e = plugK k (plugT t (redex_to_term r)).
 Admitted.
 
 (* Fixpoint decompose_e (k : K ␀) (e : tm ␀) : dec ␀ :=
