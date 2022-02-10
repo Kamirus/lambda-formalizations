@@ -211,6 +211,13 @@ Fixpoint decompose (e : tm ␀) : dec ␀ :=
     end
   end.
 
+Ltac inv_decompose_match H :=
+  match goal with
+  | H : (match decompose ?e with | dec_stuck _ _ | dec_redex _ _ _ | dec_value _ => _ end = _) |- _
+    => let d := fresh "d" in remember (decompose e) as d; inv d; inv_decompose_match H
+  | _ => try solve [inversion H; auto]; inj H
+  end.
+
 Lemma decompose_value_law : ∀ e v,
   decompose e = dec_value v → e = val_to_tm v.
 Proof.
@@ -253,9 +260,24 @@ Proof.
   - inversion H.
   Qed.
 
-Lemma decompose_redex_law : ∀ e k t r,
+Ltac inv_dec :=
+  match goal with
+  | H : dec_value ?v = decompose ?e |- _ => rewrite (decompose_value_law e v); cbn; auto
+  | H : dec_stuck ?k ?e' = decompose ?e |- _ => rewrite (decompose_stuck_law k e e'); cbn; auto
+  end.
+
+Lemma decompose_redex_law : ∀ e t k r,
   decompose e = dec_redex k t r → e = plugK k (plugT t (redex_to_term r)).
-Admitted.
+Proof.
+  dependent induction e; intros; cbn in *;
+  try solve [inversion a | inversion H | inv H];
+  inv_decompose_match H;
+  repeat inv_dec; cbn; f_equal; try solve [apply IHk; auto].
+  apply IHe2; auto.
+  apply IHe1; auto.
+  apply IHe2; auto.
+  apply IHe1; auto.
+  Qed.
 
 (* Fixpoint decompose_e (k : K ␀) (e : tm ␀) : dec ␀ :=
   match e with

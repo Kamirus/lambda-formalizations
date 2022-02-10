@@ -30,3 +30,5 @@ Global Notation "M --->* N" := (step M N) (at level 50).
 Global Hint Constructors step : core.
 
 Ltac inv H := dependent destruction H.
+Ltac inj H := injection H; intros; subst; clear H.
+    
