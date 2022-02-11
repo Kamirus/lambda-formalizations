@@ -218,7 +218,8 @@ Ltac inv_decompose_match H :=
   | _ => try solve [inversion H; auto]; inj H
   end.
 
-Lemma decompose_value_law : ∀ e v,
+(* plug ∘ decompose = id *)
+Lemma decompose_value_inversion : ∀ e v,
   decompose e = dec_value v → e = val_to_tm v.
 Proof.
   dependent inversion e; intros; cbn in *.
@@ -231,42 +232,24 @@ Proof.
   remember (decompose t0) as d0; dependent induction d0; try inversion H.
   Qed.
 
-Lemma decompose_stuck_law : ∀ k e e',
+Lemma decompose_stuck_inversion : ∀ e k e',
   decompose e = dec_stuck k e' → e = plugK k <{ S₀ e' }>.
 Proof.
-  induction k; intros.
-
-  (* ḅase *)
-  inv e; cbn in *; 
-    try solve [inversion a | inversion H | injection H; intros; subst; reflexivity];
-    remember (decompose e1) as d1; inv d1; try solve [inversion H; auto];
-    remember (decompose e2) as d2; inv d2; try solve [inversion H; auto].
-
-  (* step *)
-  inv e; cbn in *; try solve [inversion a | inversion H; auto];
-  remember (decompose e1) as d1; inv d1.
-
-  - rewrite (decompose_value_law e1 v); auto.
-    remember (decompose e2) as d2; inv d2; inversion H; clear H; subst.
-    rewrite <- (IHk e2 e'); auto.
-  - inversion H; clear H; subst.
-    rewrite <- (IHk e1 e'); auto.
-  - inversion H.
-
-  - rewrite (decompose_value_law e1 v); auto.
-    remember (decompose e2) as d2; inv d2; inversion H.
-  - inversion H; clear H; subst.
-    rewrite <- (IHk e1 e'); auto.
-  - inversion H.
+  intros e k; generalize dependent e;
+  induction k; intros; inv e; cbn in *;
+  try solve [inversion a | inversion H | inj H; reflexivity];
+  inv_decompose_match H; cbn;
+  try rewrite (decompose_value_inversion e1 v); cbn; auto;
+  f_equal; apply IHk; auto.
   Qed.
 
 Ltac inv_dec :=
   match goal with
-  | H : dec_value ?v = decompose ?e |- _ => rewrite (decompose_value_law e v); cbn; auto
-  | H : dec_stuck ?k ?e' = decompose ?e |- _ => rewrite (decompose_stuck_law k e e'); cbn; auto
+  | H : dec_value ?v = decompose ?e |- _ => rewrite (decompose_value_inversion e v); cbn; auto
+  | H : dec_stuck ?k ?e' = decompose ?e |- _ => rewrite (decompose_stuck_inversion e k e'); cbn; auto
   end.
 
-Lemma decompose_redex_law : ∀ e t k r,
+Lemma decompose_redex_inversion : ∀ e t k r,
   decompose e = dec_redex k t r → e = plugK k (plugT t (redex_to_term r)).
 Proof.
   dependent induction e; intros; cbn in *;
@@ -277,6 +260,36 @@ Proof.
   apply IHe1; auto.
   apply IHe2; auto.
   apply IHe1; auto.
+  Qed.
+
+(* decompose ∘ plug = id *)
+Lemma decompose_plug_value : ∀ v,
+  decompose (val_to_tm v) = dec_value v.
+Proof.
+  intros; destruct v; auto.
+  Qed.
+
+Lemma decompose_plug_stuck : ∀ k e, 
+  decompose (plugK k <{ S₀ e }>) = dec_stuck k e.
+Proof.
+  induction k; intros; cbn; auto.
+  inv j; cbn.
+  - rewrite IHk; auto.
+  - rewrite decompose_plug_value. rewrite IHk; auto.
+  - rewrite IHk; auto.
+  Qed.
+
+Lemma decompose_plug_redex : ∀ k t r,
+  decompose (plugK k (plugT t (redex_to_term r))) = dec_redex k t r.
+Proof with cbn; auto.
+  intros k t; generalize dependent k; induction t; intros...
+  - induction k...
+    + inv r; cbn; inv v; cbn; try solve [inv v0; auto].
+      rewrite decompose_plug_stuck; auto.
+    + inv j; try inv v; cbn; try solve [rewrite IHk; auto].
+  - induction k0...
+    + inv v... rewrite IHt...
+    + inv j; try inv v0; cbn; try solve [rewrite IHk0; auto].
   Qed.
 
 (* Fixpoint decompose_e (k : K ␀) (e : tm ␀) : dec ␀ :=
