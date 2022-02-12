@@ -659,7 +659,7 @@ Proof.
     (* econstructor. apply contr_η_val. constructor.  *)
 Admitted.
 
-
+(* 
 (* V $ K[M] = (λ x. V $ K[x]) $ M *)
 Lemma L_4_8 : ∀ A (M : tm A) V k,
   <{ (λ {↑ (tm_val V)} $ {↑k}[0]) $ M }> -->* <{ {tm_val V} $ k[M] }>.
@@ -668,4 +668,4 @@ Proof.
   ind M (λ A (M:tm A), ∀ V k, <{ (λ {↑ (tm_val V)} $ {↑k}[0]) $ M }> -->* <{ {tm_val V} $ k[M] }>);
   intros; auto.
   econstructor. constructor. econstructor. constructor. simp. simp. rewrite sub_nop. 
-Qed.
+Qed. *)
