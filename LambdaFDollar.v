@@ -1,19 +1,6 @@
 Require Export Common.
 Require Export LambdaDollar.
 
-Definition lift {A : Type} (e : tm A) : tm ^A := map Some e.
-Definition liftV {A : Type} (v : val A) : val ^A :=
-  match v with
-  | val_abs e => val_abs (lift e)
-  end.
-Definition liftJ {A : Type} (j : J A) : J ^A := 
-  match j with
-  | J_fun e => J_fun (lift e)
-  | J_arg v => J_arg (liftV v)
-  | J_dol e => J_dol (lift e)
-  end.
-Notation "↑ e" := (lift e) (at level 2).
-
 Inductive non {A} :=
 | non_s_0 : tm ^A → non (* S₀ f. e *)
 | non_app : tm A → tm A → non (* e   e *)

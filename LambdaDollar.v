@@ -10,6 +10,17 @@ Inductive tm {A} :=
 Arguments tm A : clear implicits.
 Global Hint Constructors tm : core.
 
+Inductive val {A} :=
+| val_abs : @tm ^A → val
+.
+Arguments val A : clear implicits.
+Global Hint Constructors val : core.
+
+Definition val_to_tm {A} (v : val A) := 
+  match v with
+  | val_abs e => tm_abs e
+  end.
+
 Declare Custom Entry λ_dollar_scope.
 Notation "<{ e }>" := e (at level 1, e custom λ_dollar_scope at level 99).
 Notation "( x )" := x (in custom λ_dollar_scope, x at level 99).
@@ -20,6 +31,10 @@ Notation "0" := <{ var None }> (in custom λ_dollar_scope at level 0).
 Notation "1" := <{ var {Some None} }> (in custom λ_dollar_scope at level 0).
 Notation "2" := <{ var {Some (Some None)} }> (in custom λ_dollar_scope at level 0).
 Notation "'λ' e" := (tm_abs e)
+    (in custom λ_dollar_scope at level 90,
+      e custom λ_dollar_scope at level 99,
+      right associativity).
+Notation "'λv' e" := (val_abs e)
     (in custom λ_dollar_scope at level 90,
       e custom λ_dollar_scope at level 99,
       right associativity).
@@ -79,17 +94,6 @@ Lemma bind_law : forall A e B C (f:A->tm B) (g:B->tm C),
 Admitted.
 
 
-Inductive val {A} :=
-| val_abs : @tm ^A → val
-.
-Arguments val A : clear implicits.
-Global Hint Constructors val : core.
-
-Definition val_to_tm {A} (v : val A) := 
-  match v with
-  | val_abs e => tm_abs e
-  end.
-
 Inductive Void : Type := .
 Notation "␀" := (Void).
 Definition term := tm ␀.
@@ -103,13 +107,13 @@ Definition var_subst {V} e' (v:^V) :=
   | Some v => <{ var v }>
   end.
 
-Definition tm_subst0 {V} (e:tm ^V) (e':tm V) :=
-  e >>= var_subst e'.
+Definition tm_subst0 {V} (e:tm ^V) (v:val V) :=
+  e >>= var_subst (val_to_tm v).
 
-Notation "e [ 0 := e' ]" := (tm_subst0 e e')
+Notation "e [ 0 := v ]" := (tm_subst0 e v)
   (in custom λ_dollar_scope at level 0,
     e custom λ_dollar_scope,
-    e' custom λ_dollar_scope at level 99).
+    v custom λ_dollar_scope at level 99).
 
 
 Section Contexts.
@@ -309,3 +313,61 @@ with decompose_K (v : val ␀) (k : K ␀) : dec ␀ :=
   end
 . *)
 
+
+Definition lift {A : Type} (e : tm A) : tm ^A := map Some e.
+
+Definition liftV {A : Type} (v : val A) : val ^A :=
+  match v with
+  | val_abs e => val_abs (lift e)
+  end.
+
+Definition liftJ {A : Type} (j : J A) : J ^A := 
+  match j with
+  | J_fun e => J_fun (lift e)
+  | J_arg v => J_arg (liftV v)
+  | J_dol e => J_dol (lift e)
+  end.
+
+Fixpoint liftK {A : Type} (k : K A) : K ^A :=
+  match k with
+  | K_nil => K_nil
+  | K_cons j k => K_cons (liftJ j) (liftK k)
+  end.
+
+Notation "↑ e" := (lift e) (at level 15).
+
+Definition contract (r : redex ␀) : tm ␀ :=
+  match r with
+  (* (λ x. e) v  ~>  e [x := v] *)
+  | redex_beta (val_abs e) v => <{ e [0 := v] }>
+
+  (* v1 $ v2  ~>  v1 v2 *)
+  | redex_dollar v1 v2 => <{ {val_to_tm v1} {val_to_tm v2} }>
+
+  (* v $ K[S₀ f. e]  ~>  e [f := λ x. v $ K[x]] *)
+  | redex_shift v k e  => <{ e [0 := λv {↑ val_to_tm v} $ {plugK (liftK k) <{ 0 }>}] }>
+  end.
+
+Definition step e :=
+  match decompose e with
+  | dec_redex k t r => Some (plugK k (plugT t (contract r)))
+  | _ => None
+  end.
+
+Fixpoint eval i e :=
+  match i with
+  | 0 => e
+  | S j =>
+    match step e with
+    | Some e' => eval j e'
+    | None => e
+    end
+  end.
+
+Section Examples.
+  Definition _id : tm ␀ := <{ λ 0 }>.
+  Definition _const : tm ␀ := <{ λ λ 1 }>.
+
+  Compute (eval 10 <{ _id $ _const $ S₀ 0 }>).
+  Compute (eval 10 <{ _const $ _id $ S₀ 0 }>).
+End Examples.
