@@ -26,6 +26,33 @@ Definition tm_dec (e : tm ␀) : (val ␀ + non ␀) :=
   | <{ e1 $ e2 }> => inr (non_dol e1 e2)
   end.
 
+Lemma tm_decide : ∀ e, (∃ v, tm_dec e = inl v) \/ (∃ p, tm_dec e = inr p).
+Proof.
+  intro e; remember (tm_dec e) as d eqn: H; destruct d; solve [left + right; eexists; auto].
+  Qed.
+
+Lemma tm_dec_val : ∀ e v, tm_dec e = inl v → e = val_to_tm v.
+Proof.
+  intros; inv e; cbn in *; try destruct a; inv H; auto.
+  Qed.
+Lemma tm_dec_non : ∀ e p, tm_dec e = inr p → e = non_to_tm p.
+Proof.
+  intros; inv e; cbn in *; try destruct a; inv H; auto.
+  Qed.
+
+Ltac inv_tm_dec :=
+  match goal with
+  | H : ␀ |- _ => destruct H
+  | H : (_, _) = (_, _) |- _ => inj H
+  | H : inl ?v = tm_dec ?e |- _ => rewrite (tm_dec_val e v (eq_sym H)) in *; auto
+  | H : inr ?p = tm_dec ?e |- _ => rewrite (tm_dec_non e p (eq_sym H)) in *; auto
+  | H : context C [match tm_dec ?e with inl _ => _ | inr _ => _ end] |- _ =>
+    let td := fresh "td" in
+    let Hd := fresh "Hd" in
+    remember (tm_dec e) as td eqn: Hd; inv td; try rewrite Hd in *
+  end.
+
+
 Section Contexts.
   Context {A : Type}.
   Inductive T' :=
@@ -140,7 +167,7 @@ Lemma decompose_stuck_inversion' : ∀ e k e',
 Proof.
   intros e k; generalize dependent e;
   induction k; intros; inv e; cbn in *;
-  try solve [inversion a | inversion H | inj H; reflexivity];
+  try solve [inversion a | inv H];
   inv_decompose_match' H; cbn;
   try rewrite (decompose_value_inversion' e1 v); cbn; auto;
   f_equal; apply IHk; auto.
@@ -150,32 +177,6 @@ Ltac inv_dec' :=
   match goal with
   | H : dec_value' ?v = decompose' ?e |- _ => rewrite (decompose_value_inversion' e v); cbn; auto
   | H : dec_stuck' ?k ?e' = decompose' ?e |- _ => rewrite (decompose_stuck_inversion' e k e'); cbn; auto
-  end.
-
-Lemma tm_decide : ∀ e, (∃ v, tm_dec e = inl v) \/ (∃ p, tm_dec e = inr p).
-Proof.
-  intro e; remember (tm_dec e) as d eqn: H; destruct d; solve [left + right; eexists; auto].
-  Qed.
-
-Lemma tm_dec_val : ∀ e v, tm_dec e = inl v → e = val_to_tm v.
-Proof.
-  intros; inv e; cbn in *; try destruct a; inv H; auto.
-  Qed.
-Lemma tm_dec_non : ∀ e p, tm_dec e = inr p → e = non_to_tm p.
-Proof.
-  intros; inv e; cbn in *; try destruct a; inv H; auto.
-  Qed.
-
-Ltac inv_tm_dec :=
-  match goal with
-  | H : (_, _) = (_, _) |- _ => inj H
-  | H : ␀ |- _ => destruct H
-  | H : inl ?v = tm_dec ?e |- _ => rewrite (tm_dec_val e v (eq_sym H)) in *; auto
-  | H : inr ?p = tm_dec ?e |- _ => rewrite (tm_dec_non e p (eq_sym H)) in *; auto
-  | H : context C [match tm_dec ?e with inl _ => _ | inr _ => _ end] |- _ =>
-    let td := fresh "td" in
-    let Hd := fresh "Hd" in
-    remember (tm_dec e) as td eqn: Hd; inv td; try rewrite Hd in *
   end.
 
 Lemma decomposeT_inversion' : ∀ t v e t' r,
