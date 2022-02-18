@@ -340,6 +340,46 @@ Proof with cbn; auto.
 Qed.
 
 
+Definition contract' (r : redex' ␀) : tm ␀ :=
+  match r with
+  (* (λ x. e) v  ~>  e [x := v] *)
+  | redex_beta' (val_abs e) v => <{ e [0 := v] }>
+
+  (* v1 $ v2  ~>  v1 v2 *)
+  | redex_dollar' v1 v2 => <{ {val_to_tm v1} {val_to_tm v2} }>
+
+  (* v $ S₀ f. e  ~>  e [f := λ x. v $ x] *)
+  | redex_shift' v e => <{ e [0 := λv {↑ val_to_tm v} $ 0] }>
+
+  (* v $ J[p]  ~> (λ x. v $ J[x]) $ p *)
+  | redex_let' v j p => <{ (λ {↑ val_to_tm v} $ {plugJ (liftJ j) <{ 0 }>}) $ {non_to_tm p} }>
+  end.
+
+Definition step' e :=
+  match decompose' e with
+  | dec_redex' k t r => Some (plugK k (plugT' t (contract' r)))
+  | _ => None
+  end.
+
+Fixpoint eval' i e :=
+  match i with
+  | 0 => e
+  | S j =>
+    match step' e with
+    | Some e' => eval' j e'
+    | None => e
+    end
+  end.
+
+Section Examples.
+  Definition _id : tm ␀ := <{ λ 0 }>.
+  Definition _const : tm ␀ := <{ λ λ 1 }>.
+
+  Compute (eval' 10 <{ _id $ _const $ S₀ 0 }>).
+  Compute (eval' 10 <{ _const $ _id $ S₀ 0 }>).
+End Examples.
+
+
 (* v $ K[p] ~> v' $ p *)
 (* Fixpoint decompose'K (v : val ␀) (k : K ␀) : val ␀.
 refine (
