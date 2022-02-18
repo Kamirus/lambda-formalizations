@@ -150,6 +150,53 @@ Ltac inv_decompose_match' H :=
   | _ => try solve [inversion H; auto]; try inj H
   end.
 
+
+Lemma plug_dec : forall t (e : tm ␀),
+  (plugT' t e = e /\ t = T_nil') \/
+  (∃ t' v, plugT' t e = <{ {val_to_tm v} $ {plugT' t' e} }>).
+Proof.
+  induction t; intros.
+  left; auto.
+  right; cbn.
+  destruct (IHt <{ {val_to_tm v} $ e }>) as [[H H2]|[t' [v0 H]]]; subst; cbn in *.
+  exists T_nil'; eexists; eauto.
+  exists (T_cons' v t'); eexists. rewrite H. reflexivity.
+Qed.
+
+Lemma redex_plug_redex : ∀ t (r r' : redex' ␀),
+  redex_to_term' r = plugT' t (redex_to_term' r') →
+  t = T_nil'.
+Proof with cbn in *; auto.
+  intros. destruct (plug_dec t (redex_to_term' r')) as [ [H1 H2] | [t' [v H1]]]; subst; cbn in *; auto.
+  rewrite <- H in H1.
+  destruct r; cbn in *.
+  inv H1.
+  inv H1. admit.
+  inv H1. admit.
+  inv H1. admit.
+Admitted.
+
+Lemma inj_non : ∀ {A} (p p' : non A),
+  non_to_tm p = non_to_tm p' → p = p'.
+Proof.
+  intros; destruct p, p'; cbn in *; inv H; auto.
+  Qed.
+
+Lemma inj_redex : ∀ {A} (r r' : redex' A),
+  redex_to_term' r = redex_to_term' r' -> r = r'.
+Proof.
+  intros; destruct r, r';
+  repeat match goal with
+  | v : val ?A |- _ => destruct v; cbn in *
+  | j : J ?A |- _ => destruct j; cbn in *
+  | H: non_to_tm _ = non_to_tm _ |- _ => apply inj_non in H; subst
+  | H: _ = _ |- _ => inv H
+  end; auto.
+
+  destruct n0; cbn in *; inv x.
+  destruct n; cbn in *; inv x.
+Qed.
+
 (* plug ∘ decompose' = id *)
 Lemma decompose_value_inversion' : ∀ e v,
   decompose' e = dec_value' v → e = val_to_tm v.
@@ -202,6 +249,58 @@ Proof.
   auto.
   Qed.
 
+(* decompose' ∘ plug = id *)
+Lemma decompose_plug_value' : ∀ v,
+  decompose' (val_to_tm v) = dec_value' v.
+Proof.
+  intros; destruct v; auto.
+  Qed.
+
+Lemma decompose_plug_stuck' : ∀ k e, 
+  decompose' (plugK k <{ S₀ e }>) = dec_stuck' k e.
+Proof.
+  induction k; intros; cbn; auto.
+  inv j; cbn.
+  - rewrite IHk; auto.
+  - rewrite decompose_plug_value'. rewrite IHk; auto.
+  - rewrite IHk; auto.
+  Qed.
+
+Lemma decompose_plug_redex' : ∀ k t r,
+  decompose' (plugK k (plugT' t (redex_to_term' r))) = dec_redex' k t r.
+Proof with cbn in *; auto.
+  intros k t; generalize dependent k; induction t; intros...
+  - induction k...
+    + inv r; cbn; inv v; cbn; try solve [inv v0; auto]; auto.
+      match goal with
+      | |- context C [let (_,_) := ?e in _] => remember e as p eqn:H; destruct p
+      end.
+      symmetry in H. apply decomposeT_inversion' in H. cbn in H.
+      assert (<{ (λ t) $ {plugJ j (non_to_tm n)} }> = redex_to_term' (redex_let' (val_abs t) j n)) by auto.
+      rewrite H0 in H. apply redex_plug_redex in H as Hnil. subst. cbn in H. rewrite H0 in H. apply inj_redex in H. subst.
+      f_equal.
+    + inv j; try inv v; cbn; try solve [rewrite IHk; auto].
+  - induction k...
+    + cbn. inv v... rewrite IHt...
+    + inv j; try inv v0; cbn; try solve [rewrite IHk0; auto].
+  Qed.
+
+(* Fixpoint decompose_e (k : K ␀) (e : tm ␀) : dec ␀ :=
+  match e with
+  | <{ var a }> => from_void a
+  | <{ λ  e' }> => decompose_K (val_abs e') k
+  | <{ S₀ e' }> => dec_stuck k e'
+  | <{ e1   e2 }> => decompose_e (K_fun k e2) e1
+  | <{ e1 $ e2 }> => decompose_e (K_dol k e2) e1
+  end
+with decompose_K (v : val ␀) (k : K ␀) : dec ␀ :=
+  match k with
+  | K_nil => dec_value v
+  | K_cons (J_fun e2) k1 => decompose_e (K_arg v k1) e2
+  | K_cons (J_arg v1) k2 => dec_redex k2 T_nil (redex_beta v1 v)
+  | K_cons (J_dol e2) k1 => todo
+  end
+. *)
 
 (* v $ K[p] ~> v' $ p *)
 (* Fixpoint decompose'K (v : val ␀) (k : K ␀) : val ␀.
