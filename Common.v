@@ -9,6 +9,10 @@ Open Scope program_scope.
 Notation "V ↑ n" := (iter Type n option V) (at level 5, left associativity) : type_scope.
 Notation "^ V" := (option V) (at level 4, right associativity) : type_scope.
 
+Inductive Void : Type := .
+Notation "␀" := (Void).
+Definition from_void {A} (v : ␀) : A := match v with end.
+
 Class Functor (F : Type → Type) :=
   { fmap : ∀ {A B}, (A → B) → F A → F B
 

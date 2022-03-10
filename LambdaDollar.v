@@ -85,19 +85,17 @@ Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
 
 Notation "e >>= f" := (bind f e) (at level 20, left associativity).
 
-Lemma bind_is_map : forall A e B (f:A->B),
+(* Lemma bind_is_map : forall A e B (f:A->B),
   f <$> e = e >>= (fun v => tm_var (f v)).
-Admitted.
+Admitted. *)
 
-Lemma bind_law : forall A e B C (f:A->tm B) (g:B->tm C),
+(* Lemma bind_law : forall A e B C (f:A->tm B) (g:B->tm C),
   e >>= f >>= g = e >>= (fun a => f a >>= g).
-Admitted.
+Admitted. *)
 
 
 Inductive Void : Type := .
 Notation "␀" := (Void).
-Definition term := tm ␀.
-Definition value := val ␀.
 Definition from_void {A} (v : ␀) : A := match v with end.
 
 
