@@ -151,14 +151,12 @@ Section Contexts.
   .
   Inductive K' :=
   | K_nil'  : K'
-  | K_cons' : J' → K' → K'
   | K_let'  : K' → tm' ^A → K' (* let x = K in e *)
-  | K_del'  : val' A → K' → K' (* v $ K *) (* delimited *)  
   .
 
   Inductive T' :=
   | T_nil'  : T'
-  | T_cons' : val' A → T' → T'  (* (v$) · T *)
+  | T_cons' : val' A → K' → T' → T'  (* (v$K) · T *)
   .
 
   Inductive redex' :=
@@ -173,15 +171,10 @@ Section Contexts.
 
   Inductive dec' :=
   | dec_value' : val' A → dec'
-  (* | dec_stuck' : K' → tm' ^A → dec' (* K[S₀ f. e] *) *)
-  | dec_stuck' : tm' ^A * option (tm' ^A) → dec' (* S₀ f. e1 | let x = S₀ f. e1 in e2 *)
-  (* | dec_stuck_s_0' : tm' ^A → dec' (* S₀ f. e1 *) *)
-  (* | dec_stuck_let' : tm' ^A → tm' ^A → dec' (* let x = S₀ f. e1 in e2 *) *)
+  | dec_stuck_s_0' : tm' ^A → dec' (* S₀ f. e1 *)
+  | dec_stuck_let' : tm' ^A → tm' ^A → dec' (* let x = S₀ f. e1 in e2 *)
   | dec_redex' : K' → T' → redex' → dec' (* K[T[Redex]] *)
   .
-
-  Definition dec_stuck_s_0' e := dec_stuck' (e, None).
-  Definition dec_stuck_let' e1 e2 := dec_stuck' (e1, (Some e2)).
 
   Definition stuck_to_non' : tm' ^␀ * option (tm' ^␀) → non' ␀ := λ s,
     match s with
@@ -199,17 +192,13 @@ Section Contexts.
   Fixpoint plugK' k e :=
     match k with
     | K_nil' => e
-    (* | K_cons j k' => plugK' k' (plugJ' j e) *)
-    | K_cons' j k' => plugJ' j (plugK' k' e)
     | K_let' k1 e2 => <{ let {plugK' k1 e} in e2 }>
-    | K_del' v1 k2 => <{ {val_to_tm' v1} $ {plugK' k2 e} }>
     end.
 
   Fixpoint plugT' trail e :=
     match trail with
     | T_nil' => e
-    (* | T_cons' v t => plugT' t <{ {val_to_tm' v} $ e }> *)
-    | T_cons' v t => <{ {val_to_tm' v} $ {plugT' t e} }>
+    | T_cons' v k t => <{ {val_to_tm' v} $ {plugK' k (plugT' t e)} }>
     end.
 
   Definition redex_to_term' r := 
@@ -231,44 +220,37 @@ Arguments redex' A : clear implicits.
 Arguments dec' A : clear implicits.
 
 
-Definition K_fun' {A} k e := @K_cons' A (J_fun' e) k.
-Definition K_arg' {A} v k := @K_cons' A (J_arg' v) k.
-Definition K_dol' {A} k e := @K_cons' A (J_dol' e) k.
-
 Fixpoint decompose' (e : tm' ␀) : dec' ␀ :=
   match e with
   | <{ var a }> => from_void a
   | <{ λ  e' }> => dec_value' (val_abs' e')
   | <{ S₀ e' }> => dec_stuck_s_0' e'
   | <{ e1 e2 }> =>
-    match decompose' e1 with
-    | dec_stuck' s1    => dec_redex' (K_nil') T_nil' (redex_let' (J_fun' e2) (stuck_to_non' s1))
-    | dec_redex' k t r => dec_redex' (K_fun' k e2) t r
-    | dec_value' v1    => 
-      match decompose' e2 with
-      | dec_stuck' s2    => dec_redex' (K_nil') T_nil' (redex_let' (J_arg' v1) (stuck_to_non' s2))
-      | dec_redex' k t r => dec_redex' (K_arg' v1 k) t r
-      | dec_value' v2    => dec_redex' (K_nil') T_nil' (redex_beta' v1 v2)
+    match tm_dec' e1 with
+    | inr p1 => dec_redex' K_nil' T_nil' (redex_let' (J_fun' e2) p1) (* p1 e2 *)
+    | inl v1 =>
+      match tm_dec' e2 with
+      | inr p2 => dec_redex' K_nil' T_nil' (redex_let' (J_arg' v1) p2) (* v1 p2 *)
+      | inl v2 => dec_redex' K_nil' T_nil' (redex_beta' v1 v2)         (* v1 v2 *)
       end
     end
   | <{ e1 $ e2 }> =>
-    match decompose' e1 with
-    | dec_stuck' s1    => dec_redex' (K_nil') T_nil' (redex_let' (J_dol' e2) (stuck_to_non' s1))
-    | dec_redex' k t r => dec_redex' (K_dol' k e2) t r
-    | dec_value' v1    =>
+    match tm_dec' e1 with
+    | inr p1 => dec_redex' K_nil' T_nil' (redex_let' (J_dol' e2) p1) (* p1 $ e2 *)
+    | inl v1 => (* v1 $ e *)
       match decompose' e2 with
-      | dec_stuck' (e2', None)       => dec_redex' K_nil' T_nil' (redex_shift' v1 e2')         (* v1 $ S₀ e2' *)
-      | dec_stuck' (e2_1, Some e2_2) => dec_redex' K_nil' T_nil' (redex_dol_let' v1 e2_1 e2_2) (* v1 $ let x = S₀ f. e2_1 in e2_2 *)
-      | dec_redex' k t r => dec_redex' (K_del' v1 k) t r  (* eval under the delimiter! *)
-      | dec_value' v2    => dec_redex' (K_nil') T_nil' (redex_dollar' v1 v2)
+      | dec_stuck_s_0' e2'       => dec_redex' K_nil' (T_nil')         (redex_shift' v1 e2')         (* v1 $ S₀ f. e2' *)
+      | dec_stuck_let' e2_1 e2_2 => dec_redex' K_nil' (T_nil')         (redex_dol_let' v1 e2_1 e2_2) (* v1 $ let x = S₀ f. e2_1 in e2_2 *)
+      | dec_redex' k t r         => dec_redex' K_nil' (T_cons' v1 k t) (r)                           (* v1 $ K[T[r]] *)
+      | dec_value' v2            => dec_redex' K_nil' (T_nil')         (redex_dollar' v1 v2)         (* v1 $ v2 *)
       end
     end
   | <{ let e1 in e2 }> =>
     match decompose' e1 with
-    | dec_stuck' (e1', None)       => dec_stuck_let' e1' e2 (* let x = S₀ f. e1' in e2 *)
-    | dec_stuck' (e1_1, Some e1_2) => dec_redex' K_nil' T_nil' (redex_let_assoc' e1_1 e1_2 e2) (* let x = (let y = S₀ f. e1_1 in e1_2) in e2 *)
-    | dec_redex' k t r => dec_redex' (K_let' k e2) t r
-    | dec_value' v1    => dec_redex' (K_nil') T_nil' (redex_let_beta' v1 e2) (* let x = v1 in e2 *)
+    | dec_stuck_s_0' e1'       => dec_stuck_let' e1' e2                                           (* let x = S₀ f. e1' in e2 *)
+    | dec_stuck_let' e1_1 e1_2 => dec_redex' (K_nil')      T_nil' (redex_let_assoc' e1_1 e1_2 e2) (* let x = (let y = S₀ f. e1_1 in e1_2) in e2 *)
+    | dec_redex' k t r         => dec_redex' (K_let' k e2) t      (r)                             (* let x = K[T[r]] in e2 *)
+    | dec_value' v1            => dec_redex' (K_nil')      T_nil' (redex_let_beta' v1 e2)         (* let x = v1 in e2 *)
     end
   end.
 
