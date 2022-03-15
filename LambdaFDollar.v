@@ -189,31 +189,6 @@ Ltac inv_decompose_match' H :=
   end.
 
 
-(* Lemma plug_dec : forall t (e : tm ␀),
-    (plugT' t e = e /\ t = T_nil') \/
-    (∃ t' v, plugT' t e = <{ {val_to_tm v} $ {plugT' t' e} }>).
-  Proof.
-    induction t; intros.
-    left; auto.
-    right; cbn.
-    destruct (IHt <{ {val_to_tm v} $ e }>) as [[H H2]|[t' [v0 H]]]; subst; cbn in *.
-    exists T_nil'; eexists; eauto.
-    exists (T_cons' v t'); eexists. rewrite H. reflexivity.
-  Qed.
-
-  Lemma redex_plug_redex : ∀ t (r r' : redex' ␀),
-    redex_to_term' r = plugT' t (redex_to_term' r') →
-    t = T_nil'.
-  Proof with cbn in *; auto.
-    intros. destruct (plug_dec t (redex_to_term' r')) as [ [H1 H2] | [t' [v H1]]]; subst; cbn in *; auto.
-    rewrite <- H in H1.
-    destruct r; cbn in *.
-    inv H1.
-    inv H1. admit.
-    inv H1. admit.
-    inv H1. admit.
-  Admitted. *)
-
 Lemma inj_non : ∀ {A} (p p' : non A),
   non_to_tm p = non_to_tm p' → p = p'.
 Proof.
@@ -300,6 +275,7 @@ Proof.
   (* erewrite <- (decomposeT_inversion' _ _ _ t r); eauto. *)
   erewrite <- (decomposeW_inversion' _ _ t r); eauto.
 Qed.
+
 (* decompose' ∘ plug = id *)
 Lemma decompose_plug_value' : ∀ v,
   decompose' (val_to_tm v) = dec_value' v.

@@ -140,6 +140,40 @@ Definition tm_dec' (e : tm' ␀) : (val' ␀ + non' ␀) :=
   | <{ e1 $ e2 }> => inr (non_dol' e1 e2)
   | <{ let e1 in e2 }> => inr (non_let' e1 e2)
   end.
+Lemma tm_dec_val' : ∀ e v, tm_dec' e = inl v → e = val_to_tm' v.
+Proof.
+  intros; inv e; cbn in *; try destruct a; inv H; auto.
+Qed.
+Lemma tm_dec_non' : ∀ e p, tm_dec' e = inr p → e = non_to_tm' p.
+Proof.
+  intros; inv e; cbn in *; try destruct a; inv H; auto.
+Qed.
+Lemma tm_dec_of_val' : ∀ v, tm_dec' (val_to_tm' v) = inl v.
+Proof.
+  intros; destruct v; auto.
+Qed.
+Lemma tm_dec_of_non' : ∀ p, tm_dec' (non_to_tm' p) = inr p.
+Proof.
+  intros; destruct p; auto.
+Qed.
+
+Ltac reason := repeat(
+  rewrite tm_dec_of_val' in * +
+  rewrite tm_dec_of_non' in * +
+  match goal with
+  | H : ␀ |- _ => destruct H
+  | H : (_, _) = (_, _) |- _ => inj H
+  | H : inl ?v = tm_dec' ?e |- _ => rewrite (tm_dec_val' e v (eq_sym H)) in *; auto
+  | H : inr ?p = tm_dec' ?e |- _ => rewrite (tm_dec_non' e p (eq_sym H)) in *; auto
+  | H : context C [let (_, _) := ?e in _] |- _ =>
+    let p := fresh "p" in remember e as p; inv p
+  | |- context C [let (_, _) := ?e in _] => 
+    let p := fresh "p" in remember e as p; inv p
+  | H : context C [match tm_dec' ?e with inl _ => _ | inr _ => _ end] |- _ =>
+    let td := fresh "td" in
+    let Hd := fresh "Hd" in
+    remember (tm_dec' e) as td eqn: Hd; inv td; try rewrite Hd in *
+  end).
 
 
 Section Contexts.
@@ -254,86 +288,109 @@ Fixpoint decompose' (e : tm' ␀) : dec' ␀ :=
     end
   end.
 
-(* Ltac inv_decompose_match H :=
+
+Ltac inv_decompose_match' H :=
   match goal with
-  | H : (match decompose ?e with | dec_stuck _ _ | dec_redex _ _ _ | dec_value _ => _ end = _) |- _
-    => let d := fresh "d" in remember (decompose e) as d; inv d; inv_decompose_match H
-  | _ => try solve [inversion H; auto]; inj H
-  end. *)
-
-(* plug ∘ decompose = id *)
-(* Lemma decompose_value_inversion : ∀ e v,
-  decompose e = dec_value v → e = val_to_tm' v.
-Proof.
-  dependent inversion e; intros; cbn in *.
-  inversion v.
-  injection H; intros; subst; reflexivity.
-  inversion H.
-  remember (decompose t) as d; dependent induction d; try inversion H;
-  remember (decompose t0) as d0; dependent induction d0; try inversion H.
-  remember (decompose t) as d; dependent induction d; try inversion H;
-  remember (decompose t0) as d0; dependent induction d0; try inversion H.
-  Qed.
-
-Lemma decompose_stuck_inversion : ∀ e k e',
-  decompose e = dec_stuck k e' → e = plugK k <{ S₀ e' }>.
-Proof.
-  intros e k; generalize dependent e;
-  induction k; intros; inv e; cbn in *;
-  try solve [inversion a | inversion H | inj H; reflexivity];
-  inv_decompose_match H; cbn;
-  try rewrite (decompose_value_inversion e1 v); cbn; auto;
-  f_equal; apply IHk; auto.
-  Qed.
-
-Ltac inv_dec :=
-  match goal with
-  | H : dec_value ?v = decompose ?e |- _ => rewrite (decompose_value_inversion e v); cbn; auto
-  | H : dec_stuck ?k ?e' = decompose ?e |- _ => rewrite (decompose_stuck_inversion e k e'); cbn; auto
+  | H : (match decompose' ?e with | dec_stuck_s_0' _ | dec_stuck_let' _ _ | dec_redex' _ _ _ | dec_value' _ => _ end = _) |- _ =>
+    let d := fresh "d" in remember (decompose' e) as d; inv d; inv_decompose_match' H
+  | H : (let (_,_) := ?e in _) = _ |- _ =>
+    let d := fresh "d" in remember e as d; inv d; inv_decompose_match' H
+  | _ => try solve [inversion H; auto]; try inj H
   end.
 
-Lemma decompose_redex_inversion : ∀ e t k r,
-  decompose e = dec_redex k t r → e = plugK k (plugT t (redex_to_term r)).
-Proof.
-  dependent induction e; intros; cbn in *;
-  try solve [inversion a | inversion H | inv H];
-  inv_decompose_match H;
-  repeat inv_dec; cbn; f_equal; try solve [apply IHk; auto].
-  apply IHe2; auto.
-  apply IHe1; auto.
-  apply IHe2; auto.
-  apply IHe1; auto.
-  Qed.
 
-(* decompose ∘ plug = id *)
-Lemma decompose_plug_value : ∀ v,
-  decompose (val_to_tm' v) = dec_value v.
+Lemma inj_non' : ∀ {A} (p p' : non' A),
+  non_to_tm' p = non_to_tm' p' → p = p'.
+Proof.
+  intros; destruct p, p'; cbn in *; inv H; auto.
+Qed.
+
+(* Lemma inj_redex : ∀ {A} (r r' : redex' A),
+  redex_to_term' r = redex_to_term' r' -> r = r'.
+Proof.
+  intros; destruct r, r';
+  repeat match goal with
+  | v : val ?A |- _ => destruct v; cbn in *
+  | j : J ?A |- _ => destruct j; cbn in *
+  | H: non_to_tm' _ = non_to_tm' _ |- _ => apply inj_non in H; subst
+  | H: _ = _ |- _ => inv H
+  end; auto.
+
+  destruct n0; cbn in *; inv x.
+  destruct n; cbn in *; inv x.
+Qed. *)
+
+(* plug' ∘ decompose' = id *)
+Lemma decompose_value_inversion' : ∀ e v,
+  decompose' e = dec_value' v → e = val_to_tm' v.
+Proof.
+  intros. inv e; cbn in *.
+  - destruct a.
+  - inj H; auto.
+  - inversion H.
+  - reason; inversion H.
+  - reason; inv_decompose_match' H.
+  - inv_decompose_match' H.
+Qed.
+Lemma decompose_stuck_s_0_inversion' : ∀ e e',
+  decompose' e = dec_stuck_s_0' e' → e = <{ S₀ e' }>.
+Proof.
+  intros. inv e; cbn in *; reason;
+  try solve [inversion a | inv H];
+  inv_decompose_match' H.
+Qed.
+Lemma decompose_stuck_let_inversion' : ∀ e e' e'',
+  decompose' e = dec_stuck_let' e' e'' → e = <{ let S₀ e' in e'' }>.
+Proof.
+  intros. inv e; cbn in *; reason;
+  try solve [inversion a | inv H];
+  inv_decompose_match' H.
+  rewrite (decompose_stuck_s_0_inversion' e1 e'); auto.
+Qed.
+Ltac inv_dec' :=
+  match goal with
+  | H : dec_value' ?v = decompose' ?e |- _ => rewrite (decompose_value_inversion' e v); cbn; auto
+  | H : dec_stuck_s_0' ?e' = decompose' ?e |- _ => rewrite (decompose_stuck_s_0_inversion' e e'); cbn; auto
+  | H : dec_stuck_let' ?e1 ?e2 = decompose' ?e |- _ => rewrite (decompose_stuck_let_inversion' e e1 e2); cbn; auto
+  end.
+Lemma decompose_redex_inversion' : ∀ e t k r,
+  decompose' e = dec_redex' k t r → e = plugK' k (plugT' t (redex_to_term' r)).
+Proof.
+  dependent induction e; intros; cbn in *; reason;
+  try solve [destruct a | inv H];
+  inv_decompose_match' H;
+  repeat inv_dec'; cbn; f_equal;
+  try solve [apply IHk + apply IHe1 + apply IHe2; auto].
+Qed.
+
+(* decompose' ∘ plug' = id *)
+Lemma decompose_plug_value' : ∀ v,
+  decompose' (val_to_tm' v) = dec_value' v.
 Proof.
   intros; destruct v; auto.
-  Qed.
-
-Lemma decompose_plug_stuck : ∀ k e, 
-  decompose (plugK k <{ S₀ e }>) = dec_stuck k e.
+Qed.
+Lemma decompose_plug_stuck_s_0' : ∀ e, 
+  decompose' <{ S₀ e }> = dec_stuck_s_0' e.
 Proof.
-  induction k; intros; cbn; auto.
-  inv j; cbn.
-  - rewrite IHk; auto.
-  - rewrite decompose_plug_value. rewrite IHk; auto.
-  - rewrite IHk; auto.
-  Qed.
-
-Lemma decompose_plug_redex : ∀ k t r,
-  decompose (plugK k (plugT t (redex_to_term r))) = dec_redex k t r.
+  auto.
+Qed.
+Lemma decompose_plug_stuck_let' : ∀ e1 e2,
+  decompose' <{ let S₀ e1 in e2 }> = dec_stuck_let' e1 e2.
+Proof.
+  auto.
+Qed.
+Lemma decompose_plug_redex' : ∀ k t r,
+  decompose' (plugK' k (plugT' t (redex_to_term' r))) = dec_redex' k t r.
 Proof with cbn; auto.
   intros k t; generalize dependent k; induction t; intros...
   - induction k...
-    + inv r; cbn; inv v; cbn; try solve [inv v0; auto].
-      rewrite decompose_plug_stuck; auto.
-    + inv j; try inv v; cbn; try solve [rewrite IHk; auto].
+    + inv r; cbn; try inv v; cbn; try solve [inv v0; auto]; auto.
+      inv j; cbn; reason; reflexivity.
+    + rewrite IHk; reflexivity.
   - induction k0...
     + inv v... rewrite IHt...
-    + inv j; try inv v0; cbn; try solve [rewrite IHk0; auto].
-  Qed. *)
+    + rewrite IHk0. reflexivity.
+Qed.
 
 
 Definition lift' {A : Type} (e : tm' A) : tm' ^A := map' Some e.
