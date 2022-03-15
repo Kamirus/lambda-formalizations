@@ -53,7 +53,7 @@ Notation "'λ' e" := (tm_abs' e)
     (in custom λ_let_dollar_scope at level 90,
       e custom λ_let_dollar_scope at level 99,
       right associativity).
-Notation "'λv' e" := (val_abs' e)
+Notation "'λv'' e" := (val_abs' e)
     (in custom λ_let_dollar_scope at level 90,
       e custom λ_let_dollar_scope at level 99,
       right associativity).
@@ -353,9 +353,7 @@ Definition liftJ' {A : Type} (j : J' A) : J' ^A :=
 Fixpoint liftK' {A : Type} (k : K' A) : K' ^A :=
   match k with
   | K_nil' => K_nil'
-  | K_cons' j k => K_cons' (liftJ' j) (liftK' k)
   | K_let' k1 e2 => K_let' (liftK' k1) (lift' e2)
-  | K_del' v1 k2 => K_del' (liftV' v1) (liftK' k2)
   end.
 
 (* Notation "↑ e" := (lift' e) (at level 15). *)
@@ -369,7 +367,7 @@ Definition contract' (r : redex' ␀) : tm' ␀ :=
   | redex_dollar' v1 v2 => <{ {val_to_tm' v1} {val_to_tm' v2} }>
 
   (* v $ S₀ f. e  ~>  e [f := λ x. v $ x] *)
-  | redex_shift' v e  => <{ e [0 := λv {lift' (val_to_tm' v)} $ 0] }>
+  | redex_shift' v e  => <{ e [0 := λv' {lift' (val_to_tm' v)} $ 0] }>
 
   (* v $ let x = S₀ f. e1 in e2  ~>  (λ x. v $ e2) $ S₀ f. e1 *)
   | redex_dol_let' v e1 e2 => <{ (λ {lift' (val_to_tm' v)} $ e2) $ S₀ e1 }>
@@ -406,4 +404,48 @@ Section Examples.
 
   Compute (eval' 10 <{ _id $ _const $ S₀ 0 }>).
   Compute (eval' 10 <{ _const $ _id $ S₀ 0 }>).
+
+  Definition j1 : J' ␀ := J_fun' <{ λ 0 0 }>.
+  Definition j2 : J' ␀ := J_arg' <{ λv' 0 }>.
+  Definition j3 : J' ␀ := J_dol' <{ λ 0 }>.
+  Definition ej123 := plugJ' j1 (plugJ' j2 (plugJ' j3 <{ S₀ 0 }>)).
+
+  Example from_K_to_K' : eval' 3 ej123 = <{ 
+    let
+      let
+        let S₀ 0
+        in {plugJ' (liftJ' j3) <{ 0 }>}
+      in {plugJ' (liftJ' j2) <{ 0 }>}
+    in {plugJ' (liftJ' j1) <{ 0 }>}
+  }>. Proof. auto. Qed.
+
+  Example from_K_to_stuck' : eval' 5 ej123 = <{ 
+    let S₀ 0 in
+    let
+      let {plugJ' (liftJ' j3) <{ 0 }>}
+      in {lift' (plugJ' (liftJ' j2) <{ 0 }>)}
+    in {lift' (plugJ' (liftJ' j1) <{ 0 }>)}
+  }>. Proof. auto. Qed.
+
+  Example ex_dol_let : eval' 6 <{ _id $ ej123 }> = <{ 
+    (λ {lift' _id} $ 
+      let
+        let {plugJ' (liftJ' j3) <{ 0 }>}
+        in {lift' (plugJ' (liftJ' j2) <{ 0 }>)}
+      in {lift' (plugJ' (liftJ' j1) <{ 0 }>)}
+    ) $ S₀ 0
+  }>. Proof. cbn. auto. Qed.
+
+  Example ex_shift : eval' 7 <{ _id $ ej123 }> = <{
+    λ {lift' <{ 
+        λ {lift' _id} $ 
+          let
+            let {plugJ' (liftJ' j3) <{ 0 }>}
+            in {lift' (plugJ' (liftJ' j2) <{ 0 }>)}
+          in {lift' (plugJ' (liftJ' j1) <{ 0 }>)}
+      }>} $ 0
+  }>. Proof. cbn. auto. Qed.
+
+  Compute (decompose' (eval' 7 <{ _id $ ej123 }>)).
+  
 End Examples.
