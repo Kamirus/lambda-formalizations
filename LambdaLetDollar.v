@@ -451,9 +451,15 @@ Definition optional_step' e :=
   | _ => None
   end.
 
+Reserved Notation "e1 ~>' e2" (at level 40).
+Inductive contr' : tm' ␀ → tm' ␀ → Prop :=
+| contr_tm' : ∀ r, redex_to_term' r ~>' contract' r
+where "e1 ~>' e2" := (contr' e1 e2).
+Global Hint Constructors contr' : core.
+
 Reserved Notation "e1 -->' e2" (at level 40).
 Inductive step' : tm' ␀ → tm' ␀ → Prop :=
-| step_tm' : ∀ k t r, plugK' k (plugT' t (redex_to_term' r)) -->' plugK' k (plugT' t (contract' r))
+| step_tm' : ∀ k t e1 e2, plugK' k (plugT' t e1) -->' plugK' k (plugT' t e2)
 where "e1 -->' e2" := (step' e1 e2).
 
 Notation "e1 -->'* e2" := (multi step' e1 e2) (at level 40).

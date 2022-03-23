@@ -153,7 +153,6 @@ Section Contexts.
     end.
   Notation "k [ e ]" := (plugK k e)
     (in custom λ_dollar_scope at level 70,
-      k custom λ_dollar_scope,
       e custom λ_dollar_scope at level 99).
   
   Fixpoint plugT trail e :=
@@ -343,7 +342,7 @@ Definition contract (r : redex ␀) : tm ␀ :=
   | redex_dollar v1 v2 => <{ v1 v2 }>
 
   (* v $ K[S₀ f. e]  ~>  e [f := λ x. v $ K[x]] *)
-  | redex_shift v k e  => <{ e [0 := λv {↑ val_to_tm v} $ {plugK (liftK k) <{ 0 }>}] }>
+  | redex_shift v k e  => <{ e [0 := λv {↑v} $ {plugK (liftK k) <{ 0 }>}] }>
   end.
 
 Definition optional_step e :=
@@ -352,12 +351,39 @@ Definition optional_step e :=
   | _ => None
   end.
 
+Reserved Notation "e1 ~> e2" (at level 40).
+Inductive contr : tm ␀ → tm ␀ → Prop :=
+| contr_tm : ∀ r, redex_to_term r ~> contract r
+where "e1 ~> e2" := (contr e1 e2).
+Global Hint Constructors contr : core.
+
 Reserved Notation "e1 --> e2" (at level 40).
 Inductive step : tm ␀ → tm ␀ → Prop :=
-| step_tm : ∀ k t r, plugK k (plugT t (redex_to_term r)) --> plugK k (plugT t (contract r))
+| step_tm : ∀ k t e1 e2, e1 ~> e2 → plugK k (plugT t e1) --> plugK k (plugT t e2)
 where "e1 --> e2" := (step e1 e2).
+Global Hint Constructors step : core.
 
 Notation "e1 -->* e2" := (multi step e1 e2) (at level 40).
+
+Lemma contr_beta : ∀ e (v : val ␀),
+  <{ (λ e) v }> ~> <{ e [0 := v] }>.
+Proof.
+  intros. change <{ (λ e) v }> with (redex_to_term (redex_beta <{ λv e }> v)).
+  constructor.
+Qed.
+
+Lemma contr_dollar : ∀ (v1 v2 : val ␀),
+  <{ v1 $ v2 }> ~> <{ v1 v2 }>.
+Proof.
+  intros. change <{ v1 $ v2 }> with (redex_to_term (redex_dollar v1 v2)).
+  constructor.
+Qed.
+
+Lemma contr_shift : ∀ (v : val ␀) k e,
+  <{ v $ {plugK k <{ S₀ e }>} }> ~> <{ e [0 := λv {↑v} $ {plugK (liftK k) <{ 0 }>}] }>.
+Proof.
+  intros. change <{ v $ {plugK k <{ S₀ e }>} }> with (redex_to_term (redex_shift v k e)). constructor.
+Qed.
 
 Fixpoint eval i e :=
   match i with
