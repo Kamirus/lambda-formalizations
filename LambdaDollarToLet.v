@@ -14,7 +14,7 @@ with sim_K {A} : K A → K' A → Prop :=
 | sim_K_nil  : K_nil ~ₖ K_nil'
 | sim_K_cons : ∀ j j' k k',
     j ~ⱼ j' → k ~ₖ k' →
-    K_cons j k ~ₖ K_let' k' (plugJ' (liftJ' j') (tm_var' None)) (* J[K] ~ let x = K' in J'[0] *)
+    K_cons j k ~ₖ K_let' k' (plugJ' (liftJ' j') <{ 0 }>') (* J[K] ~ let x = K' in J'[0] *)
 with sim_val {A} : val A → val' A → Prop :=
 | sim_val_abs : ∀ e e', e ~ₑ e' → val_abs e ~ᵥ val_abs' e'
 with sim_tm {A} : tm A → tm' A → Prop :=
@@ -28,3 +28,7 @@ where "e ~ₑ e'" := (sim_tm  e e')
 and   "v ~ᵥ v'" := (sim_val v v')
 and   "j ~ⱼ j'" := (sim_J   j j')
 and   "k ~ₖ k'" := (sim_K   k k').
+
+(* v $ K[S₀ f. e] -->'* e [f := λ x. v $ K'[x]] *)
+(* Lemma aux :
+  <{ {val_abs v} $ {plugK k <{ S₀ e }>} }> *)

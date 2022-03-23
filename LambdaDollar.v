@@ -20,6 +20,7 @@ Definition val_to_tm {A} (v : val A) :=
   match v with
   | val_abs e => tm_abs e
   end.
+Coercion val_to_tm : val >-> tm.
 
 Declare Custom Entry λ_dollar_scope.
 Notation "<{ e }>" := e (at level 1, e custom λ_dollar_scope at level 99).
@@ -140,7 +141,7 @@ Section Contexts.
   Definition plugJ j e' :=
     match j with
     | J_fun e => <{ e' e }>
-    | J_arg v => <{ {val_to_tm v} e' }>
+    | J_arg v => <{ v  e' }>
     | J_dol e => <{ e' $ e }>
     end.
   
@@ -150,19 +151,23 @@ Section Contexts.
     (* | K_cons j k' => plugK k' (plugJ j e) *)
     | K_cons j k' => plugJ j (plugK k' e)
     end.
+  Notation "k [ e ]" := (plugK k e)
+    (in custom λ_dollar_scope at level 70,
+      k custom λ_dollar_scope,
+      e custom λ_dollar_scope at level 99).
   
   Fixpoint plugT trail e :=
     match trail with
     | T_nil => e
     (* | T_cons v k t => plugT t <{ {val_to_tm v} $ {plugK k e} }> *)
-    | T_cons v k t => <{ {val_to_tm v} $ {plugK k (plugT t e)} }>
+    | T_cons v k t => <{ v $ k [{plugT t e}] }>
     end.
 
   Definition redex_to_term r := 
     match r with
-    | redex_beta   v1 v2 => tm_app (val_to_tm v1) (val_to_tm v2)
-    | redex_dollar v1 v2 => tm_dol (val_to_tm v1) (val_to_tm v2)
-    | redex_shift v k e  => tm_dol (val_to_tm v) (plugK k <{ S₀ e }>)
+    | redex_beta   v1 v2 => <{ v1 v2 }>
+    | redex_dollar v1 v2 => <{ v1 $ v2 }>
+    | redex_shift v k e  => <{ v $ k [S₀ e] }>
     end.
 
 End Contexts.
@@ -335,23 +340,30 @@ Definition contract (r : redex ␀) : tm ␀ :=
   | redex_beta (val_abs e) v => <{ e [0 := v] }>
 
   (* v1 $ v2  ~>  v1 v2 *)
-  | redex_dollar v1 v2 => <{ {val_to_tm v1} {val_to_tm v2} }>
+  | redex_dollar v1 v2 => <{ v1 v2 }>
 
   (* v $ K[S₀ f. e]  ~>  e [f := λ x. v $ K[x]] *)
   | redex_shift v k e  => <{ e [0 := λv {↑ val_to_tm v} $ {plugK (liftK k) <{ 0 }>}] }>
   end.
 
-Definition eval_step e :=
+Definition optional_step e :=
   match decompose e with
   | dec_redex k t r => Some (plugK k (plugT t (contract r)))
   | _ => None
   end.
 
+Reserved Notation "e1 --> e2" (at level 40).
+Inductive step : tm ␀ → tm ␀ → Prop :=
+| step_tm : ∀ k t r, plugK k (plugT t (redex_to_term r)) --> plugK k (plugT t (contract r))
+where "e1 --> e2" := (step e1 e2).
+
+Notation "e1 -->* e2" := (multi step e1 e2) (at level 40).
+
 Fixpoint eval i e :=
   match i with
   | 0 => e
   | S j =>
-    match eval_step e with
+    match optional_step e with
     | Some e' => eval j e'
     | None => e
     end

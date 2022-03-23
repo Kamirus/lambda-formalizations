@@ -21,6 +21,7 @@ Definition val_to_tm' {A} (v : val' A) :=
   match v with
   | val_abs' e => tm_abs' e
   end.
+Coercion val_to_tm' : val' >-> tm'.
 
 Inductive non' {A} :=
 | non_s_0' : tm' ^A → non' (* S₀ f. e *)
@@ -39,6 +40,7 @@ Definition non_to_tm' {A} (p : non' A) :=
   | non_dol' e1 e2 => tm_dol' e1 e2
   | non_let' e1 e2 => tm_let' e1 e2
   end.
+Coercion non_to_tm' : non' >-> tm'.
 
 Declare Custom Entry λ_let_dollar_scope.
 Notation "<{ e }>'" := e (at level 1, e custom λ_let_dollar_scope at level 99).
@@ -219,7 +221,7 @@ Section Contexts.
   Definition plugJ' j e' :=
     match j with
     | J_fun' e => <{ e' e }>'
-    | J_arg' v => <{ {val_to_tm' v} e' }>'
+    | J_arg' v => <{ v  e' }>'
     | J_dol' e => <{ e' $ e }>'
     end.
   
@@ -228,21 +230,25 @@ Section Contexts.
     | K_nil' => e
     | K_let' k1 e2 => <{ let {plugK' k1 e} in e2 }>'
     end.
+  Notation "k [ e ]" := (plugK' k e)
+    (in custom λ_let_dollar_scope at level 70,
+      k custom λ_let_dollar_scope,
+      e custom λ_let_dollar_scope at level 99).
 
   Fixpoint plugT' trail e :=
     match trail with
     | T_nil' => e
-    | T_cons' v k t => <{ {val_to_tm' v} $ {plugK' k (plugT' t e)} }>'
+    | T_cons' v k t => <{ v $ k [{plugT' t e}] }>'
     end.
 
   Definition redex_to_term' r := 
     match r with
-    | redex_beta'   v1 v2 => <{ {val_to_tm' v1} {val_to_tm' v2} }>'
-    | redex_dollar' v1 v2 => <{ {val_to_tm' v1} $ {val_to_tm' v2} }>'
-    | redex_shift'  v  e  => <{ {val_to_tm' v } $  S₀ e }>'
-    | redex_dol_let' v e1 e2 => <{ {val_to_tm' v } $ let S₀ e1 in e2 }>'
-    | redex_let' j p  => plugJ' j (non_to_tm' p)
-    | redex_let_beta' v e => <{ let {val_to_tm' v} in e }>'
+    | redex_beta'   v1 v2 => <{ v1 v2 }>'
+    | redex_dollar' v1 v2 => <{ v1 $ v2 }>'
+    | redex_shift'  v  e  => <{ v $ S₀ e }>'
+    | redex_dol_let' v e1 e2 => <{ v $ let S₀ e1 in e2 }>'
+    | redex_let' j p  => plugJ' j p
+    | redex_let_beta' v e => <{ let v in e }>'
     | redex_let_assoc' e1 e2 e3 => <{ let (let S₀ e1 in e2) in e3 }>'
     end.
 
@@ -421,16 +427,16 @@ Definition contract' (r : redex' ␀) : tm' ␀ :=
   | redex_beta' (val_abs' e) v => <{ e [0 := v] }>'
 
   (* v1 $ v2  ~>  v1 v2 *)
-  | redex_dollar' v1 v2 => <{ {val_to_tm' v1} {val_to_tm' v2} }>'
+  | redex_dollar' v1 v2 => <{ v1 v2 }>'
 
   (* v $ S₀ f. e  ~>  e [f := λ x. v $ x] *)
-  | redex_shift' v e  => <{ e [0 := λv' {lift' (val_to_tm' v)} $ 0] }>'
+  | redex_shift' v e  => <{ e [0 := λv' {lift' v} $ 0] }>'
 
   (* v $ let x = S₀ f. e1 in e2  ~>  (λ x. v $ e2) $ S₀ f. e1 *)
-  | redex_dol_let' v e1 e2 => <{ (λ {lift' (val_to_tm' v)} $ e2) $ S₀ e1 }>'
+  | redex_dol_let' v e1 e2 => <{ (λ {lift' v} $ e2) $ S₀ e1 }>'
 
   (* J[p]  ~>  let x = p in J[x] *)
-  | redex_let' j p => <{ let {non_to_tm' p} in {plugJ' (liftJ' j) <{ 0 }>'} }>'
+  | redex_let' j p => <{ let p in {plugJ' (liftJ' j) <{ 0 }>'} }>'
 
   (* let x = v in e  ~>  e [x := v] *)
   | redex_let_beta' v e => <{ e [0 := v] }>'
