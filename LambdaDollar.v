@@ -94,11 +94,6 @@ Admitted. *)
 Admitted. *)
 
 
-Inductive Void : Type := .
-Notation "␀" := (Void).
-Definition from_void {A} (v : ␀) : A := match v with end.
-
-
 Definition var_subst {V} e' (v:^V) :=
   match v with
   | None => e'
