@@ -341,7 +341,7 @@ Definition contract (r : redex ␀) : tm ␀ :=
   | redex_shift v k e  => <{ e [0 := λv {↑ val_to_tm v} $ {plugK (liftK k) <{ 0 }>}] }>
   end.
 
-Definition step e :=
+Definition eval_step e :=
   match decompose e with
   | dec_redex k t r => Some (plugK k (plugT t (contract r)))
   | _ => None
@@ -351,7 +351,7 @@ Fixpoint eval i e :=
   match i with
   | 0 => e
   | S j =>
-    match step e with
+    match eval_step e with
     | Some e' => eval j e'
     | None => e
     end

@@ -439,7 +439,7 @@ Definition contract' (r : redex' ␀) : tm' ␀ :=
   | redex_let_assoc' e1 e2 e3 => <{ let S₀ e1 in let e2 in {lift' e3} }>
   end.
 
-Definition step' e :=
+Definition eval_step' e :=
   match decompose' e with
   | dec_redex' k t r => Some (plugK' k (plugT' t (contract' r)))
   | _ => None
@@ -449,7 +449,7 @@ Fixpoint eval' i e :=
   match i with
   | 0 => e
   | S j =>
-    match step' e with
+    match eval_step' e with
     | Some e' => eval' j e'
     | None => e
     end

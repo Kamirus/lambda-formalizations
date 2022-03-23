@@ -516,7 +516,7 @@ Section Reduction.
   | contr_name  : ∀ A (j : J A) (P : non _), contr <{ j[P] }> <{ let P in {↑j}[0] }>
   .
 
-  Definition reduces {A} := @step (tm A) contr.
+  Definition reduces {A} := @multi (tm A) contr.
 
 End Reduction.
 
@@ -559,7 +559,7 @@ Module Export Notations.
   Include Notations_Tm.
   
   Notation "M -->  N" := (contr   M N) (at level 50).
-  (* Notation "M -->* N" := (@step term contr M N) (at level 50). *)
+  (* Notation "M -->* N" := (@multi term contr M N) (at level 50). *)
   Notation "M -->* N" := (reduces M N) (at level 50).
   Notation "M '~'  N" := (similar M N) (at level 50).
 
@@ -617,7 +617,7 @@ Proof.
   eapply contr_name. *)
 Admitted.
 
-Lemma reduces_app_l : ∀ A M (V : val A),
+(* Lemma reduces_app_l : ∀ A M (V : val A),
   M -->* tm_val V → ∀ N,
   <{ M N }> -->* <{ {tm_val V} N }>.
 Proof.
@@ -625,7 +625,7 @@ Proof.
   econstructor.
   destruct M.
   - apply value_reduces in H as [V' [HM' H]]; subst. rewrite H.
-Admitted.
+Admitted. *)
 
 Lemma similar_refl : ∀ A (M : tm A), M ~ M.
 Proof.

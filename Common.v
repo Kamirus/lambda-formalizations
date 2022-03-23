@@ -3,6 +3,7 @@ Require Export Coq.funind.Recdef.
 Require Export Coq.Logic.FunctionalExtensionality.
 Require Export Coq.Program.Basics.
 Require Export Coq.Program.Equality.
+Require Export Coq.Relations.Relation_Definitions.
 
 Open Scope program_scope.
 
@@ -23,15 +24,10 @@ Class Functor (F : Type → Type) :=
       ∀ A B C (f : B → C) (g : A → B) (x : F A), fmap (f ∘ g) x = fmap f (fmap g x)
   }.
 
-Inductive step {T} {contr : T → T → Prop} : T → T → Prop :=
-| step_refl  : ∀ M, step M M
-| step_trans : ∀ M M' N,
-    contr M M' → 
-    step    M' N → 
-    step  M    N
-.
-Global Notation "M --->* N" := (step M N) (at level 50).
-Global Hint Constructors step : core.
+Inductive multi {X : Type} (R : relation X) : relation X :=
+| multi_refl : ∀ (x : X), multi R x x
+| multi_step : ∀ (x y z : X), R x y → multi R y z → multi R x z.
+Global Hint Constructors multi : core.
 
 Ltac inv H := dependent destruction H.
 Ltac inj H := injection H; intros; subst; clear H.
