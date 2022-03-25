@@ -133,6 +133,13 @@ Notation "e [ 0 := v ]" := (tm_subst0' e v)
     v custom λ_let_dollar_scope at level 99).
 
 
+Class Plug' (E : Type → Type) := plug' : ∀ {A}, E A → tm' A → tm' A.
+
+Notation "E [ e ]" := (plug' E e)
+  (in custom λ_let_dollar_scope at level 70,
+    e custom λ_let_dollar_scope at level 99).
+
+
 Definition tm_dec' (e : tm' ␀) : (val' ␀ + non' ␀) :=
   match e with
   | <{ var a }>' => from_void a
@@ -211,53 +218,52 @@ Section Contexts.
   | dec_stuck_let' : tm' ^A → tm' ^A → dec' (* let x = S₀ f. e1 in e2 *)
   | dec_redex' : K' → T' → redex' → dec' (* K[T[Redex]] *)
   .
-
-  Definition stuck_to_non' : tm' ^␀ * option (tm' ^␀) → non' ␀ := λ s,
-    match s with
-    | (e, None) => non_s_0' e
-    | (e1, Some e2) => non_let' <{ S₀ e1 }>' e2
-    end.
-
-  Definition plugJ' j e' :=
-    match j with
-    | J_fun' e => <{ e' e }>'
-    | J_arg' v => <{ v  e' }>'
-    | J_dol' e => <{ e' $ e }>'
-    end.
-  
-  Fixpoint plugK' k e :=
-    match k with
-    | K_nil' => e
-    | K_let' k1 e2 => <{ let {plugK' k1 e} in e2 }>'
-    end.
-  Notation "k [ e ]" := (plugK' k e)
-    (in custom λ_let_dollar_scope at level 70,
-      k custom λ_let_dollar_scope,
-      e custom λ_let_dollar_scope at level 99).
-
-  Fixpoint plugT' trail e :=
-    match trail with
-    | T_nil' => e
-    | T_cons' v k t => <{ v $ k [{plugT' t e}] }>'
-    end.
-
-  Definition redex_to_term' r := 
-    match r with
-    | redex_beta'   v1 v2 => <{ v1 v2 }>'
-    | redex_dollar' v1 v2 => <{ v1 $ v2 }>'
-    | redex_shift'  v  e  => <{ v $ S₀ e }>'
-    | redex_dol_let' v e1 e2 => <{ v $ let S₀ e1 in e2 }>'
-    | redex_let' j p  => plugJ' j p
-    | redex_let_beta' v e => <{ let v in e }>'
-    | redex_let_assoc' e1 e2 e3 => <{ let (let S₀ e1 in e2) in e3 }>'
-    end.
-
 End Contexts.
 Arguments J' A : clear implicits.
 Arguments K' A : clear implicits.
 Arguments T' A : clear implicits.
 Arguments redex' A : clear implicits.
 Arguments dec' A : clear implicits.
+
+Definition plugJ' {A} (j : J' A) e' :=
+  match j with
+  | J_fun' e => <{ e' e }>'
+  | J_arg' v => <{ v  e' }>'
+  | J_dol' e => <{ e' $ e }>'
+  end.
+Instance PlugJ' : Plug' J' := @plugJ'.
+
+Fixpoint plugK' {A} (k : K' A) e :=
+  match k with
+  | K_nil' => e
+  | K_let' k1 e2 => <{ let {plugK' k1 e} in e2 }>'
+  end.
+Instance PlugK' : Plug' K' := @plugK'.
+
+Fixpoint plugT' {A} (trail : T' A) e :=
+  match trail with
+  | T_nil' => e
+  | T_cons' v k t => <{ v $ k [{plugT' t e}] }>'
+  end.
+Instance PlugT' : Plug' T' := @plugT'.
+
+Definition redex_to_term' {A} (r : redex' A) := 
+  match r with
+  | redex_beta'   v1 v2 => <{ v1 v2 }>'
+  | redex_dollar' v1 v2 => <{ v1 $ v2 }>'
+  | redex_shift'  v  e  => <{ v $ S₀ e }>'
+  | redex_dol_let' v e1 e2 => <{ v $ let S₀ e1 in e2 }>'
+  | redex_let' j p  => <{ j[p] }>'
+  | redex_let_beta' v e => <{ let v in e }>'
+  | redex_let_assoc' e1 e2 e3 => <{ let (let S₀ e1 in e2) in e3 }>'
+  end.
+Coercion redex_to_term' : redex' >-> tm'.
+
+Definition stuck_to_non' : tm' ^␀ * option (tm' ^␀) → non' ␀ := λ s,
+  match s with
+  | (e, None) => non_s_0' e
+  | (e1, Some e2) => non_let' <{ S₀ e1 }>' e2
+  end.
 
 
 Fixpoint decompose' (e : tm' ␀) : dec' ␀ :=
@@ -360,7 +366,7 @@ Ltac inv_dec' :=
   | H : dec_stuck_let' ?e1 ?e2 = decompose' ?e |- _ => rewrite (decompose_stuck_let_inversion' e e1 e2); cbn; auto
   end.
 Lemma decompose_redex_inversion' : ∀ e t k r,
-  decompose' e = dec_redex' k t r → e = plugK' k (plugT' t (redex_to_term' r)).
+  decompose' e = dec_redex' k t r → e = <{ k[t[r]] }>'.
 Proof.
   dependent induction e; intros; cbn in *; reason;
   try solve [destruct a | inv H];
@@ -385,8 +391,8 @@ Lemma decompose_plug_stuck_let' : ∀ e1 e2,
 Proof.
   auto.
 Qed.
-Lemma decompose_plug_redex' : ∀ k t r,
-  decompose' (plugK' k (plugT' t (redex_to_term' r))) = dec_redex' k t r.
+Lemma decompose_plug_redex' : ∀ k t (r : redex' ␀),
+  decompose' <{ k[t[r]] }>' = dec_redex' k t r.
 Proof with cbn; auto.
   intros k t; generalize dependent k; induction t; intros...
   - induction k...
@@ -399,25 +405,27 @@ Proof with cbn; auto.
 Qed.
 
 
-Definition lift' {A : Type} (e : tm' A) : tm' ^A := map' Some e.
+Instance LiftTm' : Lift tm' := λ {A}, map' Some.
 
 Definition liftV' {A : Type} (v : val' A) : val' ^A :=
   match v with
-  | val_abs' e => val_abs' (lift' e)
+  | val_abs' e => val_abs' (map' (option_map Some) e)
   end.
 
 Definition liftJ' {A : Type} (j : J' A) : J' ^A := 
   match j with
-  | J_fun' e => J_fun' (lift' e)
+  | J_fun' e => J_fun' (↑e)
   | J_arg' v => J_arg' (liftV' v)
-  | J_dol' e => J_dol' (lift' e)
+  | J_dol' e => J_dol' (↑e)
   end.
+Instance LiftJ' : Lift J' := @liftJ'.
 
 Fixpoint liftK' {A : Type} (k : K' A) : K' ^A :=
   match k with
   | K_nil' => K_nil'
-  | K_let' k1 e2 => K_let' (liftK' k1) (lift' e2)
+  | K_let' k1 e2 => K_let' (liftK' k1) (↑e2)
   end.
+Instance LiftK' : Lift K' := @liftK'.
 
 (* Notation "↑ e" := (lift' e) (at level 15). *)
 
@@ -430,24 +438,25 @@ Definition contract' (r : redex' ␀) : tm' ␀ :=
   | redex_dollar' v1 v2 => <{ v1 v2 }>'
 
   (* v $ S₀ f. e  ~>  e [f := λ x. v $ x] *)
-  | redex_shift' v e  => <{ e [0 := λv' {lift' v} $ 0] }>'
+  | redex_shift' v e  => <{ e [0 := v] }>'
+  (* | redex_shift' v e  => <{ e [0 := λv' {liftV' v} $ 0] }>' *)
 
   (* v $ let x = S₀ f. e1 in e2  ~>  (λ x. v $ e2) $ S₀ f. e1 *)
-  | redex_dol_let' v e1 e2 => <{ (λ {lift' v} $ e2) $ S₀ e1 }>'
+  | redex_dol_let' v e1 e2 => <{ (λ {liftV' v} $ e2) $ S₀ e1 }>'
 
   (* J[p]  ~>  let x = p in J[x] *)
-  | redex_let' j p => <{ let p in {plugJ' (liftJ' j) <{ 0 }>'} }>'
+  | redex_let' j p => <{ let p in ↑j[0] }>'
 
   (* let x = v in e  ~>  e [x := v] *)
   | redex_let_beta' v e => <{ e [0 := v] }>'
 
   (* let x = (let y = S₀ f. e1 in e2) in e3  ~>  let y = S₀ f. e1 in let x = e2 in e3*)
-  | redex_let_assoc' e1 e2 e3 => <{ let S₀ e1 in let e2 in {lift' e3} }>'
+  | redex_let_assoc' e1 e2 e3 => <{ let S₀ e1 in let e2 in ↑e3 }>'
   end.
 
 Definition optional_step' e :=
   match decompose' e with
-  | dec_redex' k t r => Some (plugK' k (plugT' t (contract' r)))
+  | dec_redex' k t r => Some <{ k[t[{contract' r}]] }>'
   | _ => None
   end.
 
@@ -459,7 +468,7 @@ Global Hint Constructors contr' : core.
 
 Reserved Notation "e1 -->' e2" (at level 40).
 Inductive step' : tm' ␀ → tm' ␀ → Prop :=
-| step_tm' : ∀ k t e1 e2, plugK' k (plugT' t e1) -->' plugK' k (plugT' t e2)
+| step_tm' : ∀ k t e1 e2, <{ k[t[e1]] }>' -->' <{ k[t[e2]] }>'
 where "e1 -->' e2" := (step' e1 e2).
 
 Notation "e1 -->'* e2" := (multi step' e1 e2) (at level 40).
@@ -484,42 +493,36 @@ Section Examples.
   Definition j1 : J' ␀ := J_fun' <{ λ 0 0 }>'.
   Definition j2 : J' ␀ := J_arg' <{ λv' 0 }>'.
   Definition j3 : J' ␀ := J_dol' <{ λ 0 }>'.
-  Definition ej123 := plugJ' j1 (plugJ' j2 (plugJ' j3 <{ S₀ 0 }>')).
+  Definition ej123 := <{ j1[j2[j3[S₀ 0]]] }>'.
 
   Example from_K_to_K' : eval' 3 ej123 = <{ 
     let
       let
         let S₀ 0
-        in {plugJ' (liftJ' j3) <{ 0 }>'}
-      in {plugJ' (liftJ' j2) <{ 0 }>'}
-    in {plugJ' (liftJ' j1) <{ 0 }>'}
+        in ↑j3[0]
+      in ↑j2[0]
+    in ↑j1[0]
   }>'. Proof. auto. Qed.
 
   Example from_K_to_stuck' : eval' 5 ej123 = <{ 
     let S₀ 0 in
     let
-      let {plugJ' (liftJ' j3) <{ 0 }>'}
-      in {lift' (plugJ' (liftJ' j2) <{ 0 }>')}
-    in {lift' (plugJ' (liftJ' j1) <{ 0 }>')}
+      let ↑j3[0]
+      in ↑↑j2[1]
+    in ↑↑j1[1]
   }>'. Proof. auto. Qed.
 
   Example ex_dol_let : eval' 6 <{ _id $ ej123 }>' = <{ 
-    (λ {lift' _id} $ 
+    (λ ↑_id $ 
       let
-        let {plugJ' (liftJ' j3) <{ 0 }>'}
-        in {lift' (plugJ' (liftJ' j2) <{ 0 }>')}
-      in {lift' (plugJ' (liftJ' j1) <{ 0 }>')}
+        let ↑j3[0]
+        in ↑↑j2[1]
+      in ↑↑j1[1]
     ) $ S₀ 0
   }>'. Proof. cbn. auto. Qed.
 
   Example ex_shift : eval' 7 <{ _id $ ej123 }>' = <{
-    λ {lift' <{ 
-        λ {lift' _id} $ 
-          let
-            let {plugJ' (liftJ' j3) <{ 0 }>'}
-            in {lift' (plugJ' (liftJ' j2) <{ 0 }>')}
-          in {lift' (plugJ' (liftJ' j1) <{ 0 }>')}
-      }>'} $ 0
+    λ ↑_id $ let (let ↑j3[0] in ↑↑j2[1]) in ↑↑j1[1]
   }>'. Proof. cbn. auto. Qed.
 
   Compute (decompose' (eval' 7 <{ _id $ ej123 }>')).

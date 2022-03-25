@@ -110,6 +110,13 @@ Notation "e [ 0 := v ]" := (tm_subst0 e v)
     v custom λ_dollar_scope at level 99).
 
 
+Class Plug (E : Type → Type) := plug : ∀ {A}, E A → tm A → tm A.
+
+Notation "E [ e ]" := (plug E e)
+  (in custom λ_dollar_scope at level 70,
+    e custom λ_dollar_scope at level 99).
+
+
 Section Contexts.
   Context {A : Type}.
   Inductive J :=
@@ -137,44 +144,44 @@ Section Contexts.
   | dec_stuck : K → tm ^A → dec (* K[S₀ f. e] *)
   | dec_redex : K → T → redex → dec (* K[T[Redex]] *)
   .
-
-  Definition plugJ j e' :=
-    match j with
-    | J_fun e => <{ e' e }>
-    | J_arg v => <{ v  e' }>
-    | J_dol e => <{ e' $ e }>
-    end.
-  
-  Fixpoint plugK k e :=
-    match k with
-    | K_nil => e
-    (* | K_cons j k' => plugK k' (plugJ j e) *)
-    | K_cons j k' => plugJ j (plugK k' e)
-    end.
-  Notation "k [ e ]" := (plugK k e)
-    (in custom λ_dollar_scope at level 70,
-      e custom λ_dollar_scope at level 99).
-  
-  Fixpoint plugT trail e :=
-    match trail with
-    | T_nil => e
-    (* | T_cons v k t => plugT t <{ {val_to_tm v} $ {plugK k e} }> *)
-    | T_cons v k t => <{ v $ k [{plugT t e}] }>
-    end.
-
-  Definition redex_to_term r := 
-    match r with
-    | redex_beta   v1 v2 => <{ v1 v2 }>
-    | redex_dollar v1 v2 => <{ v1 $ v2 }>
-    | redex_shift v k e  => <{ v $ k [S₀ e] }>
-    end.
-
 End Contexts.
 Arguments J A : clear implicits.
 Arguments K A : clear implicits.
 Arguments T A : clear implicits.
 Arguments redex A : clear implicits.
 Arguments dec A : clear implicits.
+
+Definition plugJ {A} (j : J A) e' :=
+  match j with
+  | J_fun e => <{ e' e }>
+  | J_arg v => <{ v  e' }>
+  | J_dol e => <{ e' $ e }>
+  end.
+Instance PlugJ : Plug J := @plugJ.
+
+Fixpoint plugK {A} (k : K A) e :=
+  match k with
+  | K_nil => e
+  (* | K_cons j k' => plugK k' (plugJ j e) *)
+  | K_cons j k' => plugJ j (plugK k' e)
+  end.
+Instance PlugK : Plug K := @plugK.
+
+Fixpoint plugT {A} (trail : T A) e :=
+  match trail with
+  | T_nil => e
+  (* | T_cons v k t => plugT t <{ {val_to_tm v} $ {plugK k e} }> *)
+  | T_cons v k t => <{ v $ k [{plugT t e}] }>
+  end.
+Instance PlugT : Plug T := @plugT.
+
+Definition redex_to_term {A} (r : redex A) : tm A := 
+  match r with
+  | redex_beta   v1 v2 => <{ v1 v2 }>
+  | redex_dollar v1 v2 => <{ v1 $ v2 }>
+  | redex_shift v k e  => <{ v $ k [S₀ e] }>
+  end.
+Coercion redex_to_term : redex >-> tm.
 
 Definition K_fun {A} k e := @K_cons A (J_fun e) k.
 Definition K_arg {A} v k := @K_cons A (J_arg v) k.
@@ -234,7 +241,7 @@ Proof.
   Qed.
 
 Lemma decompose_stuck_inversion : ∀ e k e',
-  decompose e = dec_stuck k e' → e = plugK k <{ S₀ e' }>.
+  decompose e = dec_stuck k e' → e = <{ k[S₀ e'] }>.
 Proof.
   intros e k; generalize dependent e;
   induction k; intros; inv e; cbn in *;
@@ -251,7 +258,7 @@ Ltac inv_dec :=
   end.
 
 Lemma decompose_redex_inversion : ∀ e t k r,
-  decompose e = dec_redex k t r → e = plugK k (plugT t (redex_to_term r)).
+  decompose e = dec_redex k t r → e = <{ k[t[r]] }>.
 Proof.
   dependent induction e; intros; cbn in *;
   try solve [inversion a | inversion H | inv H];
@@ -271,7 +278,7 @@ Proof.
   Qed.
 
 Lemma decompose_plug_stuck : ∀ k e, 
-  decompose (plugK k <{ S₀ e }>) = dec_stuck k e.
+  decompose <{ k[S₀ e] }> = dec_stuck k e.
 Proof.
   induction k; intros; cbn; auto.
   inv j; cbn.
@@ -280,8 +287,8 @@ Proof.
   - rewrite IHk; auto.
   Qed.
 
-Lemma decompose_plug_redex : ∀ k t r,
-  decompose (plugK k (plugT t (redex_to_term r))) = dec_redex k t r.
+Lemma decompose_plug_redex : ∀ k t (r : redex ␀),
+  decompose <{ k[t[r]] }> = dec_redex k t r.
 Proof with cbn; auto.
   intros k t; generalize dependent k; induction t; intros...
   - induction k...
@@ -291,47 +298,31 @@ Proof with cbn; auto.
   - induction k0...
     + inv v... rewrite IHt...
     + inv j; try inv v0; cbn; try solve [rewrite IHk0; auto].
-  Qed.
-
-(* Fixpoint decompose_e (k : K ␀) (e : tm ␀) : dec ␀ :=
-  match e with
-  | <{ var a }> => from_void a
-  | <{ λ  e' }> => decompose_K (val_abs e') k
-  | <{ S₀ e' }> => dec_stuck k e'
-  | <{ e1   e2 }> => decompose_e (K_fun k e2) e1
-  | <{ e1 $ e2 }> => decompose_e (K_dol k e2) e1
-  end
-with decompose_K (v : val ␀) (k : K ␀) : dec ␀ :=
-  match k with
-  | K_nil => dec_value v
-  | K_cons (J_fun e2) k1 => decompose_e (K_arg v k1) e2
-  | K_cons (J_arg v1) k2 => dec_redex k2 T_nil (redex_beta v1 v)
-  | K_cons (J_dol e2) k1 => todo
-  end
-. *)
+Qed.
 
 
-Definition lift {A : Type} (e : tm A) : tm ^A := map Some e.
+Instance LiftTm : Lift tm := λ {A}, map Some.
 
 Definition liftV {A : Type} (v : val A) : val ^A :=
   match v with
-  | val_abs e => val_abs (lift e)
+  | val_abs e => val_abs (map (option_map Some) e)
   end.
 
 Definition liftJ {A : Type} (j : J A) : J ^A := 
   match j with
-  | J_fun e => J_fun (lift e)
+  | J_fun e => J_fun (↑e)
   | J_arg v => J_arg (liftV v)
-  | J_dol e => J_dol (lift e)
+  | J_dol e => J_dol (↑e)
   end.
+Instance LiftJ : Lift J := @liftJ.
 
 Fixpoint liftK {A : Type} (k : K A) : K ^A :=
   match k with
   | K_nil => K_nil
-  | K_cons j k => K_cons (liftJ j) (liftK k)
+  | K_cons j k => K_cons (↑j) (liftK k)
   end.
+Instance LiftK : Lift K := @liftK.
 
-Notation "↑ e" := (lift e) (at level 15).
 
 Definition contract (r : redex ␀) : tm ␀ :=
   match r with
@@ -342,12 +333,12 @@ Definition contract (r : redex ␀) : tm ␀ :=
   | redex_dollar v1 v2 => <{ v1 v2 }>
 
   (* v $ K[S₀ f. e]  ~>  e [f := λ x. v $ K[x]] *)
-  | redex_shift v k e  => <{ e [0 := λv {↑v} $ {plugK (liftK k) <{ 0 }>}] }>
+  | redex_shift v k e  => <{ e [0 := λv {liftV v} $ ↑k[0] ] }>
   end.
 
 Definition optional_step e :=
   match decompose e with
-  | dec_redex k t r => Some (plugK k (plugT t (contract r)))
+  | dec_redex k t r => Some <{ k[t[{contract r}]] }>
   | _ => None
   end.
 
@@ -359,7 +350,7 @@ Global Hint Constructors contr : core.
 
 Reserved Notation "e1 --> e2" (at level 40).
 Inductive step : tm ␀ → tm ␀ → Prop :=
-| step_tm : ∀ k t e1 e2, e1 ~> e2 → plugK k (plugT t e1) --> plugK k (plugT t e2)
+| step_tm : ∀ k t e1 e2, e1 ~> e2 → <{ k[t[e1]] }> --> <{ k[t[e2]] }>
 where "e1 --> e2" := (step e1 e2).
 Global Hint Constructors step : core.
 
@@ -380,9 +371,9 @@ Proof.
 Qed.
 
 Lemma contr_shift : ∀ (v : val ␀) k e,
-  <{ v $ {plugK k <{ S₀ e }>} }> ~> <{ e [0 := λv {↑v} $ {plugK (liftK k) <{ 0 }>}] }>.
+  <{ v $ k[S₀ e] }> ~> <{ e [0 := λv {liftV v} $ ↑k[0] ] }>.
 Proof.
-  intros. change <{ v $ {plugK k <{ S₀ e }>} }> with (redex_to_term (redex_shift v k e)). constructor.
+  intros. change <{ v $ k[S₀ e] }> with (redex_to_term (redex_shift v k e)). constructor.
 Qed.
 
 Fixpoint eval i e :=
@@ -401,4 +392,15 @@ Section Examples.
 
   Compute (eval 10 <{ _id $ _const $ S₀ 0 }>).
   Compute (eval 10 <{ _const $ _id $ S₀ 0 }>).
+
+  Definition j1 : J ␀ := J_fun <{ λ 0 0 }>.
+  Definition j2 : J ␀ := J_arg <{ λv 0 }>.
+  Definition j3 : J ␀ := J_dol <{ λ 0 }>.
+  Definition ej123 := <{ j1[j2[j3[S₀ 0]]] }>.
+
+  Example ex_shift : eval 1 <{ _id $ ej123 }> = <{
+    λ ↑_id $ ↑j1[↑j2[↑j3[0]]]
+  }>. Proof. cbn. auto. Qed.
+
+  Compute (decompose (eval 1 <{ _id $ ej123 }>)).
 End Examples.

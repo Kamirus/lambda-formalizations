@@ -32,3 +32,6 @@ Global Hint Constructors multi : core.
 Ltac inv H := dependent destruction H.
 Ltac inj H := injection H; intros; subst; clear H.
     
+
+Class Lift (F : Type → Type) := lift : ∀ {A}, F A → F ^A.
+Notation "↑ e" := (lift e) (at level 0).
