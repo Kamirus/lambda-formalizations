@@ -130,6 +130,25 @@ Proof.
     apply (multi_trans Hmulti1).
     apply multi_k'. apply Hmulti2.
   Qed.
+
+Lemma plug_kt_steps_to_similar_kt' : ∀ (k : K ␀) (t : T ␀) (p : non ␀) term',
+  <{ k [t [p]] }> ~ₑ term' →
+  ∃ (k' : K' ␀) (t' : T' ␀) (p' : non' ␀),
+    term' -->'* <| k'[ t' [p']] |> /\
+    k ~ₖ k' /\
+    t ~ₜ t' /\
+    p ~ₚ p'.
+Proof.
+  intros.
+  destruct (plug_non_is_non K_nil t p) as [tp Htp]; cbn in Htp. rewrite Htp in H.
+  apply plug_k_steps_to_similar_k' in H as [k' [p1 [Hmulti1 [Hk Hp1]]]].
+  inversion Hp1; clear Hp1; subst. rewrite <- Htp in *.
+  apply plug_t_steps_to_similar_t' in H as [t' [p2 [Hmulti2 [Ht Hp2]]]].
+  inversion Hp2; clear Hp2; subst.
+  exists k'. exists t'. exists p2. repeat split; auto.
+  apply (multi_trans Hmulti1).
+  apply (multi_k' _ _ _ Hmulti2).
+Qed.
 (* v $ K[S₀ f. e] -->'* e [f := λ x. v $ K'[x]] *)
 (* Lemma aux :
   <{ {val_abs v} $ {plugK k <{ S₀ e }>} }> *)
