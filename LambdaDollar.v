@@ -432,3 +432,15 @@ Section Examples.
 
   Compute (decompose (eval 1 <{ _id $ ej123 }>)).
 End Examples.
+
+
+Lemma plug_non_is_non : ∀ (k : K ␀) (t : T ␀) (p : non ␀),
+  ∃ ktp, <{ k [t [p]] }> = non_to_tm ktp.
+Proof.
+  intros; destruct k; cbn in *.
+  destruct t; cbn in *.
+  eexists; reflexivity.
+  eexists (non_dol _ _); reflexivity.
+  destruct j; cbn;
+  eexists (non_app _ _) + eexists (non_dol _ _) + eexists (non_fun _ _); reflexivity.
+Qed.

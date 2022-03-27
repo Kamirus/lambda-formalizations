@@ -625,3 +625,44 @@ Proof.
   apply step_let'.
   apply H.
 Qed.
+
+Lemma step_delim' : ∀ (v : val' ␀) e1 e2,
+  e1 -->' e2 →
+  <| v $ e1 |> -->' <| v $ e2 |>.
+Proof.
+  intros. generalize dependent v.
+  induction H; auto; intros.
+  apply (step_tm' K_nil' (T_cons' v k t) e1 e2).
+  apply H.
+Qed.
+
+Lemma multi_delim' : ∀ (v : val' ␀) e1 e2,
+  e1 -->'* e2 →
+  <| v $ e1 |> -->'* <| v $ e2 |>.
+Proof.
+  intros. generalize dependent v.
+  induction H; auto; intros.
+  eapply (multi_step); [idtac | apply IHmulti].
+  apply step_delim'.
+  apply H.
+Qed.
+
+Lemma step_k' : ∀ e1 e2 (k : K' ␀),
+  e1 -->' e2 →
+  <| k[e1] |> -->' <| k[e2] |>.
+Proof.
+  intros e1 e2 k; generalize dependent e1; generalize dependent e2.
+  induction k; auto; intros.
+  cbn. apply step_let'. apply IHk. apply H.
+Qed.
+
+Lemma multi_k' : ∀ e1 e2 (k : K' ␀),
+  e1 -->'* e2 →
+  <| k[e1] |> -->'* <| k[e2] |>.
+Proof.
+  intros. generalize dependent k.
+  induction H; auto; intros.
+  eapply (multi_step); [idtac | apply IHmulti].
+  apply step_k'.
+  apply H.
+Qed.

@@ -86,7 +86,7 @@ Proof.
   repeat eexists; eauto.
 Qed.
 
-(* k[p] *)
+(* k[p] ~ e' -->'* k'[p'] *)
 Lemma plug_k_steps_to_similar_k' : ∀ (k : K ␀) (p : non ␀) term',
   <{ k [p] }> ~ₑ term' →
   ∃ (k' : K' ␀) (p' : non' ␀),
@@ -105,6 +105,30 @@ Proof.
     repeat split; auto.
     apply (multi_contr' _ _ _ (contr_let' j' p')).
     apply (multi_let'). apply Hstep.
+  Qed.
+
+Lemma plug_t_steps_to_similar_t' : ∀ (t : T ␀) (p : non ␀) term',
+  <{ t [p] }> ~ₑ term' →
+  ∃ (t' : T' ␀) (p' : non' ␀),
+    term' -->'* <| t'[ p'] |> /\
+    t ~ₜ t' /\
+    p ~ₚ p'.
+Proof.
+  induction t; intros; cbn in *.
+  - apply sim_non_inv in H as [p' [H Hp]]; subst.
+    exists T_nil'; exists p'; auto.
+  - inversion H; clear H; subst.
+    apply sim_val_inv in H2 as [v' [HH Hv]]; subst.
+    destruct (plug_non_is_non K_nil t p) as [tp Htp]; cbn in Htp. rewrite Htp in H4.
+    apply plug_k_steps_to_similar_k' in H4 as [k' [p' [Hmulti1 [Hk Hp]]]].
+    inversion Hp; clear Hp; subst. rewrite <- Htp in *.
+    apply IHt in H as [t' [p'' [Hmulti2 [Ht Hp2]]]].
+    inversion Hp2; clear Hp2; subst. 
+    exists (T_cons' v' k' t'). exists p''; repeat split; auto.
+    cbn.
+    apply multi_delim'.
+    apply (multi_trans Hmulti1).
+    apply multi_k'. apply Hmulti2.
   Qed.
 (* v $ K[S₀ f. e] -->'* e [f := λ x. v $ K'[x]] *)
 (* Lemma aux :

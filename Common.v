@@ -29,6 +29,16 @@ Inductive multi {X : Type} (R : relation X) : relation X :=
 | multi_step : ∀ (x y z : X), R x y → multi R y z → multi R x z.
 Global Hint Constructors multi : core.
 
+Lemma multi_trans : ∀ {X} {R : relation X} {x y z},
+  multi R x y →
+  multi R   y z →
+  multi R x   z.
+Proof.
+  intros. generalize dependent z. induction H; intros; auto.
+  apply IHmulti in H1.
+  eapply multi_step; eassumption.
+Qed.
+
 Ltac inv H := dependent destruction H.
 Ltac inj H := injection H; intros; subst; clear H.
     
