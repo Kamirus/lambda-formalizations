@@ -22,6 +22,23 @@ Definition val_to_tm {A} (v : val A) :=
   end.
 Coercion val_to_tm : val >-> tm.
 
+Inductive non {A} :=
+| non_s_0 : tm ^A → non (* S₀ f. e *)
+| non_app : tm A → tm  A → non (* e   e *)
+| non_dol : tm A → tm  A → non (* e $ e *)
+.
+
+Arguments non A : clear implicits.
+Global Hint Constructors non : core.
+
+Definition non_to_tm {A} (p : non A) := 
+  match p with
+  | non_s_0 e => tm_s_0 e
+  | non_app e1 e2 => tm_app e1 e2
+  | non_dol e1 e2 => tm_dol e1 e2
+  end.
+Coercion non_to_tm : non >-> tm.
+
 Declare Custom Entry λ_dollar_scope.
 Notation "<{ e }>" := e (at level 1, e custom λ_dollar_scope at level 99).
 Notation "( x )" := x (in custom λ_dollar_scope, x at level 99).
@@ -350,7 +367,7 @@ Global Hint Constructors contr : core.
 
 Reserved Notation "e1 --> e2" (at level 40).
 Inductive step : tm ␀ → tm ␀ → Prop :=
-| step_tm : ∀ k t e1 e2, e1 ~> e2 → <{ k[t[e1]] }> --> <{ k[t[e2]] }>
+| step_tm : ∀ (k : K ␀) (t : T ␀) (e1 e2 : tm ␀), e1 ~> e2 → <{ k[t[e1]] }> --> <{ k[t[e2]] }>
 where "e1 --> e2" := (step e1 e2).
 Global Hint Constructors step : core.
 
@@ -375,6 +392,17 @@ Lemma contr_shift : ∀ (v : val ␀) k e,
 Proof.
   intros. change <{ v $ k[S₀ e] }> with (redex_to_term (redex_shift v k e)). constructor.
 Qed.
+
+Lemma no_contr_lambda : ∀ e e2, ~ <{ λ e }> ~> e2.
+Proof.
+  intros e e2 H. inversion H; clear H; subst. destruct r; inversion H1.
+Qed.
+Lemma no_contr_shift : ∀ e e2, ~ <{ S₀ e }> ~> e2.
+Proof.
+  intros e e2 H. inversion H; clear H; subst. destruct r; inversion H1.
+Qed.
+
+Global Hint Resolve contr_beta contr_dollar contr_shift no_contr_lambda no_contr_shift : core.
 
 Fixpoint eval i e :=
   match i with
