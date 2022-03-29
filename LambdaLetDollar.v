@@ -474,12 +474,26 @@ Global Hint Constructors step' : core.
 
 Notation "e1 -->'* e2" := (multi step' e1 e2) (at level 40).
 
-Lemma contr_is_step' : ∀ e1 e2,
-  e1 ~>' e2 → e1 -->' e2.
+Lemma step_contr' : ∀ {e1 e2},
+  e1 ~>' e2 →
+  e1 -->' e2.
 Proof.
   intros.
   apply (step_tm' K_nil' T_nil' e1 e2).
   assumption.
+Qed.
+Lemma multi_contr' : ∀ {e1 e2},
+  e1 ~>' e2 →
+  e1 -->'* e2.
+Proof.
+  intros. apply (multi_step _ _ _ _ (step_contr' H)); auto.
+Qed.
+Lemma multi_contr_multi' : ∀ {e1 e2 e3},
+  e1 ~>' e2 →
+  e2 -->'* e3 →
+  e1 -->'* e3.
+Proof.
+  intros. eapply multi_step; try eapply (step_tm' K_nil' T_nil'); cbn; eassumption.
 Qed.
 Definition contr_beta' : ∀ e (v : val' ␀), <| (λ e) v |> ~>' <| e [ 0 := v ] |> := λ e v, contr_tm' (redex_beta' (val_abs' e) v).
 Definition contr_dollar' : ∀ (v1 v2 : val' ␀), <| v1 $ v2 |> ~>' <| v1 v2 |> := λ v1 v2, contr_tm' (redex_dollar' v1 v2).
@@ -488,7 +502,7 @@ Definition contr_dol_let' : ∀ (v : val' ␀) e1 e2, <| v $ let S₀ e1 in e2 |
 Definition contr_let' : ∀ (j : J' ␀) (p : non' ␀), <| j[p] |> ~>' <| let p in ↑j[0] |> := λ j p, contr_tm' (redex_let' j p).
 Definition contr_let_beta' : ∀ (v : val' ␀) e, <| let v in e |> ~>' <| e [ 0 := v ] |> := λ v e, contr_tm' (redex_let_beta' v e).
 Definition contr_let_assoc' : ∀ e1 e2 e3, <| let (let S₀ e1 in e2) in e3 |> ~>' <| let S₀ e1 in let e2 in ↑e3 |> := λ e1 e2 e3, contr_tm' (redex_let_assoc' e1 e2 e3).
-Global Hint Resolve contr_is_step' contr_beta' contr_dollar' contr_shift' contr_dol_let' contr_let' contr_let_beta' contr_let_assoc' : core.
+Global Hint Resolve step_contr' contr_beta' contr_dollar' contr_shift' contr_dol_let' contr_let' contr_let_beta' contr_let_assoc' : core.
 
 Fixpoint eval' i e :=
   match i with
@@ -597,15 +611,8 @@ Proof.
   apply (non_when_steps_to_non' _ p''). rewrite Hp'' in *. assumption.
 Qed.
 
-Lemma multi_contr' : ∀ e1 e2 e3,
-  e1 ~>' e2 →
-  e2 -->'* e3 →
-  e1 -->'* e3.
-Proof.
-  intros. eapply multi_step; try eapply (step_tm' K_nil' T_nil'); cbn; eassumption.
-Qed.
 
-Lemma step_let' : ∀ e1 e2 e,
+Lemma step_let' : ∀ {e1 e2 e},
   e1 -->' e2 →
   <| let e1 in e |> -->' <| let e2 in e |>.
 Proof.
@@ -615,7 +622,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma multi_let' : ∀ e1 e2 e,
+Lemma multi_let' : ∀ {e1 e2 e},
   e1 -->'* e2 →
   <| let e1 in e |> -->'* <| let e2 in e |>.
 Proof.
@@ -626,7 +633,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma step_delim' : ∀ (v : val' ␀) e1 e2,
+Lemma step_delim' : ∀ {v : val' ␀} {e1 e2},
   e1 -->' e2 →
   <| v $ e1 |> -->' <| v $ e2 |>.
 Proof.
@@ -636,7 +643,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma multi_delim' : ∀ (v : val' ␀) e1 e2,
+Lemma multi_delim' : ∀ {v : val' ␀} {e1 e2},
   e1 -->'* e2 →
   <| v $ e1 |> -->'* <| v $ e2 |>.
 Proof.
@@ -647,7 +654,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma step_k' : ∀ e1 e2 (k : K' ␀),
+Lemma step_k' : ∀ {e1 e2} {k : K' ␀},
   e1 -->' e2 →
   <| k[e1] |> -->' <| k[e2] |>.
 Proof.
@@ -656,7 +663,7 @@ Proof.
   cbn. apply step_let'. apply IHk. apply H.
 Qed.
 
-Lemma multi_k' : ∀ e1 e2 (k : K' ␀),
+Lemma multi_k' : ∀ {e1 e2} {k : K' ␀},
   e1 -->'* e2 →
   <| k[e1] |> -->'* <| k[e2] |>.
 Proof.
@@ -664,5 +671,25 @@ Proof.
   induction H; auto; intros.
   eapply (multi_step); [idtac | apply IHmulti].
   apply step_k'.
+  apply H.
+Qed.
+
+Lemma step_t' : ∀ {e1 e2} {t : T' ␀},
+  e1 -->' e2 →
+  <| t[e1] |> -->' <| t[e2] |>.
+Proof.
+  intros e1 e2 t; generalize dependent e1; generalize dependent e2.
+  induction t; auto; intros.
+  cbn. apply step_delim'. apply step_k'. apply IHt. apply H.
+Qed.
+
+Lemma multi_t' : ∀ {e1 e2} {t : T' ␀},
+  e1 -->'* e2 →
+  <| t[e1] |> -->'* <| t[e2] |>.
+Proof.
+  intros. generalize dependent t.
+  induction H; auto; intros.
+  eapply (multi_step); [idtac | apply IHmulti].
+  apply step_t'.
   apply H.
 Qed.

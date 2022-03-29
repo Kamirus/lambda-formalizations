@@ -73,15 +73,15 @@ Fixpoint map {A B : Type} (f : A -> B) (e : tm A) : tm B :=
   | <{ e1 $ e2 }> => <{ {map f e1} $ {map f e2} }>
   end.
 
-Notation "f <$> a" := (map f a) (at level 40, left associativity).
+(* Notation "f <$> a" := (map f a) (at level 40, left associativity). *)
 
-Lemma map_id_law : forall {V} (f : V -> V) e,
+(* Lemma map_id_law : forall {V} (f : V -> V) e,
   (forall x, f x = x) ->
   f <$> e = e.
 Admitted.
 Lemma map_comp_law : forall A e B C (f:A->B) (g:B->C),
   g <$> (f <$> e) = g ∘ f <$> e.
-Admitted.
+Admitted. *)
 
 
 Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
@@ -443,4 +443,10 @@ Proof.
   eexists (non_dol _ _); reflexivity.
   destruct j; cbn;
   eexists (non_app _ _) + eexists (non_dol _ _) + eexists (non_fun _ _); reflexivity.
+Qed.
+
+Lemma redex_is_non : ∀ {A} r, ∃ p, @redex_to_term A r = non_to_tm p.
+Proof.
+  intros. destruct r; cbn;
+  try solve [try destruct j; eexists (non_app _ _) + eexists (non_dol _ _); reflexivity].
 Qed.
