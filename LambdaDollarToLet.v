@@ -253,35 +253,114 @@ Proof.
   cbn; rewrite <- lift_map';
   apply (sim_let (J_dol (map f e2)) (J_dol' (map' f e2')) (map f e1) (map' f e1')); auto.
 Qed.
+Global Hint Resolve sim_map : core.
+
+Lemma sim_let_arg : ∀ {A} (v : val A) v' e e' ev ev',
+  ev  = val_to_tm  v  →
+  ev' = val_to_tm' v' →
+  e ~ₑ e' →
+  v ~ᵥ v' →
+  <{ ev e }> ~ₑ <| let e' in ↑ev' 0 |>.
+Proof.
+  intros. remember (sim_let (J_arg v) (J_arg' v') e e') as Hs eqn: HHs; clear HHs.
+  cbn in *. subst. rewrite lift_val_to_tm'. apply Hs; auto.
+Qed.
+
+Lemma sim_bind : ∀ {A} {e e' B} {f : A → tm B} {f' : A → tm' B},
+  e ~ₑ e' →
+  (∀ a, f a ~ₑ f' a) →
+  bind f e ~ₑ bind' f' e'.
+Proof.
+  induction e; intros; inversion H; clear H; subst; cbn; auto;
+  try solve [destruct j; inversion H1];
+  try solve [constructor; apply IHe; auto; intros [a|]; auto].
+
+  inversion H2; clear H2; subst; cbn in *; inversion H1; clear H1; reason; subst.
+  rename e'0 into e1'; rename e' into e2'.
+  remember (sim_let (J_fun (bind f e2)) (J_fun' (bind' f' e2')) (bind f e1) (bind' f' e1')) as Hg eqn: HHg; clear HHg.
+  cbn in *.
+  rewrite bind_lift'. rewrite lambda_match_just_some. 
+  change (λ a : A, map' Some (f' a)) with (lift ∘ f').
+  rewrite <- lift_bind'. apply Hg; auto.
+
+  rename e'0 into e2'; rename v'0 into v'.
+  rewrite <- lift_val_to_tm'.
+  rewrite bind_lift'. rewrite lambda_match_just_some.
+  change (λ a : A, map' Some (f' a)) with (map' Some ∘ f').
+  specialize IHe1 with (e' := v').
+  assert (bind f v ~ₑ bind' f' v'). apply IHe1; auto.
+  rewrite map_bind_law'. change (map' Some (bind' f' v')) with (↑(bind' f' v')).
+  inversion Hv; clear Hv; subst. 
+  cbn in *.
+  rewrite lift_tm_abs'.
+  eapply sim_let_arg; auto; reflexivity.
+
+  inversion H2; clear H2; subst; cbn in *; inversion H1; clear H1; reason; subst.
+  rename e'0 into e1'; rename e' into e2'.
+  remember (sim_let (J_dol (bind f e2)) (J_dol' (bind' f' e2')) (bind f e1) (bind' f' e1')) as Hg eqn: HHg; clear HHg.
+  cbn in *.
+  rewrite bind_lift'. rewrite lambda_match_just_some. 
+  change (λ a : A, map' Some (f' a)) with (lift ∘ f').
+  rewrite <- lift_bind'. apply Hg; auto.
+Qed.
+Global Hint Resolve sim_bind : core.
 
 Lemma sim_plug_k : ∀ {A} (k : K A) k' e e',
   k ~ₖ k' →
   e ~ₑ e' →
   <{ k[e] }> ~ₑ <| k'[e'] |>.
-Admitted.
-(* Proof.
-  intros A. induction k; intros; inversion H; clear H; subst; auto.
-  cbn in *.
-  destruct j; cbn in *; inversion H3; clear H3; subst; cbn in *.
-  constructor.
-Qed. *)
+Proof.
+  induction k; intros; inversion H; clear H; subst; cbn; auto.
+Qed.
+
+Lemma sim_plug_t : ∀ {A} (t : T A) t' e e',
+  t ~ₜ t' →
+  e ~ₑ e' →
+  <{ t[e] }> ~ₑ <| t'[e'] |>.
+Proof.
+  induction t; intros; inversion H; clear H; subst; cbn; auto.
+  constructor; auto.
+  apply sim_plug_k; auto.
+Qed.
 
 Lemma sim_lift_val : ∀ {A} {v : val A} {v'},
   v ~ᵥ v' →
   liftV v ~ᵥ liftV' v'.
-Admitted.
+Proof.
+  intros. inversion H; clear H; subst. cbn. constructor.
+  inversion H0; clear H0; subst. constructor. apply (sim_map H2).
+Qed.
 
 Lemma sim_subst_lemma : ∀ e e' v (v' : val' ␀),
   e ~ₑ e' →
   v ~ᵥ v' →
   <{ e [0 := v] }> ~ₑ <| e' [0 := v'] |>.
+Proof.
+  intros. unfold tm_subst0. unfold tm_subst0'.
+  apply sim_bind; auto.
+  intros [n|]; try destruct n; cbn. auto.
+Qed.
+
+Theorem main : ∀ (k' : K' ␀) e' k e,
+  k ~ₖ k' →
+  e ~ₑ e' → ∃ ek,
+  <| k' [S₀ e'] |> -->'* <| let S₀ e' in ek |> /\
+  <{ ↑k[0] }> ~ₑ ek.
+Proof with auto.
+  induction k'; intros; inversion H; clear H; subst; cbn.
+  - repeat eexists.
+    apply multi_contr'. apply contr_shift'. apply sim_subst_lemma... admit. (* ADD ETA-DOLLAR-EXPANDED VALUES TO SIM *)
+  - destruct (IHk' _ _ _ _ _ H H6 H1) as [term' [IH1 IH2]].
+    inversion IH1; clear IH1; subst. 
+    repeat eexists.
+    
 Admitted.
 
-Theorem dollar_to_let_simulation_step_base : ∀ e1 e2 e1',
+Theorem dollar_to_let_simulation_step : ∀ e1 e2 e1',
   e1 --> e2 →
   e1 ~ₑ e1' →
-  ∃ e2', e1' -->'* e2' /\ e2 ~ e2'.
-Proof.
+  ∃ e2', e1' -->'* e2' /\ e2 ~ₑ e2'.
+Proof with auto.
   intros term1 term2 term1' Hstep Hsim.
   inversion Hstep; clear Hstep; subst.
   inversion H; clear H; subst.
@@ -298,9 +377,62 @@ Proof.
     + exists <| k' [t' [e' [0 := v0']]] |>. split.
       * apply (multi_trans Hmulti).
         apply (multi_k' (multi_t' (multi_contr' (contr_beta' _ _)))).
-      * apply sim_top_cons; auto.
-        apply sim_subst_lemma; auto.
-    + exists <| k' [t' [({liftV' v'} $ ↑k'0[0]) [0 := v0']]] |>. split.
+      * apply sim_plug_k...
+        apply sim_plug_t...
+        apply sim_subst_lemma...
+    + destruct j; inversion H.
+    + destruct p'; inversion H1; clear H1; subst; cbn in *.
+      destruct j; inversion H0; clear H0; subst; inversion H2; clear H2; subst; cbn in *.
+      * inversion H3; clear H3; subst; try solve [destruct j; inversion H].
+        reason.
+        exists <| k' [t' [{tm_subst0' e'0 v'}]] |>; split.
+        apply (multi_trans Hmulti).
+        apply multi_k'. apply multi_t'.
+        change <| λ e'0 |> with (val_to_tm' <| λv' e'0 |>).
+        eapply (multi_contr_multi' (contr_let_beta' _ _)).
+        change (tm_subst0' <| 0 {↑(val_to_tm' v')} |> <| λv' e'0 |>) with <| (λ e'0) {↑(val_to_tm' v')}[0 := λv' e'0] |>.
+        rewrite subst_lift'.
+        apply (multi_contr' (contr_beta' _ _)).
+        apply sim_plug_k... apply sim_plug_t... apply sim_subst_lemma...
+      * destruct v; inversion H1; clear H1; subst. reason; subst.
+        inversion Hv; clear Hv; subst.
+        repeat eexists.
+        apply (multi_trans Hmulti).
+        eapply multi_k'. eapply multi_t'.
+        eapply (multi_contr_multi' (contr_let_beta' _ _)).
+        rewrite <- lift_val_to_tm'.
+        change (tm_subst0' <| {↑(val_to_tm' <| λv' e' |>)} 0 |> v'1) with <| {↑(val_to_tm' <| λv' e' |>)} [0 := v'1] v'1 |>.
+        rewrite subst_lift'.
+        apply (multi_contr' (contr_beta' _ _)).
+        apply sim_plug_k... apply sim_plug_t... apply sim_subst_lemma...
+        inversion H0; clear H0; subst...
+  - destruct p'; inversion H; clear H; subst; reason; cbn in *.
+    + repeat eexists.
+      apply (multi_trans Hmulti). eapply multi_k'. eapply multi_t'. eapply multi_contr'...
+      apply sim_plug_k... apply sim_plug_t... 
+    + destruct j; inversion H0; clear H0; subst; inversion H3; clear H3; reason; subst. cbn in *.
+      repeat eexists.
+      apply (multi_trans Hmulti). eapply multi_k'. eapply multi_t'.
+      eapply multi_contr_multi'.
+      eapply contr_let_beta'. 
+      change (tm_subst0' <| 0 $ ↑ (val_to_tm' v') |> v'0) with <| v'0 $ {↑(val_to_tm' v')}[ 0 := v'0] |>.
+      rewrite subst_lift'.
+      eapply multi_contr'...
+      apply sim_plug_k... apply sim_plug_t...
+  - change <{ S₀ t0 }> with (non_to_tm (non_s_0 t0)) in H.
+    apply (plug_t_steps_to_similar_t' (T_cons v k0 T_nil) _ _) in H as [t'' [p'' [Hmulti' [Ht' Hp']]]].
+    inversion Ht'; clear Ht'; subst. inversion H5; clear H5; subst. inversion Hp'; clear Hp'; subst. cbn in *.
+    inversion H; clear H; subst; try solve [destruct j; inversion H0].
+    rewrite <- H1 in *. clear H1 p''.
+    repeat eexists.
+    apply (multi_trans Hmulti).
+    eapply multi_k'. eapply multi_t'.
+    apply (multi_trans Hmulti').
+    admit.
+    apply sim_plug_k... apply sim_plug_t...
+    cbn.
+    apply
+        admit. 
       * apply (multi_trans Hmulti).
         apply (multi_k' (multi_t' (multi_contr' (contr_beta' _ _)))).
       * apply sim_top_cons; auto.

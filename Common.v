@@ -60,3 +60,19 @@ Proof.
   intros. apply functional_extensionality. intros. generalize dependent B.
   induction x; intros; cbn; auto.
 Qed.
+
+Lemma aux : ∀ {A} (a: A),
+  option_map Some (Some a) = Some (Some a).
+Proof.
+  reflexivity.
+Qed.
+
+Lemma lambda_match_just_some : ∀ {A B} (f : A → B) non,
+  (λ a : ^ A,
+    match a with
+    | Some a => f a
+    | None => non
+    end) ∘ Some = λ a, f a.
+Proof.
+  intros. apply functional_extensionality; intros a; cbn; auto.
+Qed.

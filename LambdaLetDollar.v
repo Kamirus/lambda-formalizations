@@ -145,13 +145,37 @@ Proof.
   f_equal; apply functional_extensionality; intros [a|]; cbn; auto.
 Qed.
 
-(* Lemma bind_is_map : forall A e B (f:A->B),
-  f <$> e = e >>= (fun v => tm_var (f v)).
-Admitted. *)
+Lemma map_bind_law' : ∀ {A B C} (f : A → tm' B) (g : B → C) e,
+  bind' (map' g ∘ f) e = map' g (bind' f e).
+Proof.
+  intros; generalize dependent B; generalize dependent C; induction e; intros; cbn; auto;
+  try solve [
+    rewrite <- IHe; repeat f_equal; apply functional_extensionality; intros [a|]; auto; cbn;
+    change ((map' g ∘ f) a) with (map' g (f a));
+    repeat rewrite map_map_law'; f_equal];
+  try solve [f_equal; apply IHe1 + apply IHe2].
+  rewrite IHe1; f_equal. rewrite <- IHe2.
+  f_equal; apply functional_extensionality; intros [a|]; cbn; auto.
+  change ((map' g ∘ f) a) with (map' g (f a)); repeat rewrite map_map_law'; f_equal.
+Qed.
 
-(* Lemma bind_law : forall A e B C (f:A->tm' B) (g:B->tm' C),
-  e >>= f >>= g = e >>= (fun a => f a >>= g).
-Admitted. *)
+Lemma map_as_bind' : ∀ {A B} e (f : A → B),
+  map' f e = bind' (tm_var' ∘ f) e.
+Proof.
+  intros; generalize dependent B; induction e; intros; cbn; auto;
+  try solve [rewrite IHe; repeat f_equal; apply functional_extensionality; intros [a|]; auto];
+  try solve [rewrite IHe1; rewrite IHe2; reflexivity].
+  rewrite IHe1; f_equal. rewrite IHe2; f_equal.
+  apply functional_extensionality; intros [a|]; auto.
+Qed.
+
+(* Lemma bind_assoc' : ∀ {A B C} (f : A → tm' B) (g : B → tm' C) e,
+  bind' g (bind' f e) = bind' (λ a, bind' g (f a)) e.
+Proof.
+  intros; generalize dependent B; generalize dependent C; induction e; intros; cbn; auto.
+  rewrite IHe; repeat f_equal; apply functional_extensionality; intros [a|]; auto.
+  rewrite bind_map_law'.
+Qed. *)
 
 
 Definition var_subst' {V} e' (v:^V) :=
@@ -448,6 +472,12 @@ Definition liftV' {A : Type} (v : val' A) : val' ^A :=
   | val_abs' e => val_abs' (map' (option_map Some) e)
   end.
 
+Lemma lift_val_to_tm' : ∀ {A} (v : val' A),
+  ↑ (val_to_tm' v) = val_to_tm' (liftV' v).
+Proof.
+  intros. destruct v; cbn. reflexivity.
+Qed.
+
 Definition liftJ' {A : Type} (j : J' A) : J' ^A := 
   match j with
   | J_fun' e => J_fun' (↑e)
@@ -738,6 +768,28 @@ Proof.
   unfold lift. unfold LiftTm'.
   repeat rewrite map_map_law'.
   f_equal.
+Qed.
+
+Lemma bind_lift' : ∀ {A B} e (f : ^A → tm' B),
+  bind' f (↑e) = bind' (f ∘ Some) e.
+Proof.
+  intros.
+  unfold lift. unfold LiftTm'.
+  rewrite bind_map_law'. f_equal.
+Qed.
+
+Lemma lift_bind' : ∀ {A B} e (f : A → tm' B),
+  ↑(bind' f e) = bind' (lift ∘ f) e.
+Proof.
+  intros.
+  unfold lift. unfold LiftTm'.
+  rewrite map_bind_law'. reflexivity.
+  Qed.
+
+Lemma lift_tm_abs' : ∀ {A} (e : tm' ^A),
+  <| λ {map' (option_map Some) e} |> = ↑<| λ e |>.
+Proof.
+  reflexivity.
 Qed.
 
 Lemma subst_lift' : ∀ {A} (e : tm' A) v,

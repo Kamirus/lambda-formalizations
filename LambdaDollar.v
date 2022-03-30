@@ -108,7 +108,7 @@ Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
       end) e')
   end.
 
-Notation "e >>= f" := (bind f e) (at level 20, left associativity).
+(* Notation "e >>= f" := (bind f e) (at level 20, left associativity). *)
 
 (* Lemma bind_is_map : forall A e B (f:A->B),
   f <$> e = e >>= (fun v => tm_var (f v)).
@@ -126,7 +126,7 @@ Definition var_subst {V} e' (v:^V) :=
   end.
 
 Definition tm_subst0 {V} (e:tm ^V) (v:val V) :=
-  e >>= var_subst (val_to_tm v).
+  bind (var_subst (val_to_tm v)) e.
 
 Notation "e [ 0 := v ]" := (tm_subst0 e v)
   (in custom λ_dollar_scope at level 0,
