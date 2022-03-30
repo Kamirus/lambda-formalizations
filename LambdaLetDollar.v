@@ -89,10 +89,17 @@ Fixpoint map' {A B : Type} (f : A -> B) (e : tm' A) : tm' B :=
 (* Lemma map_id_law : forall {V} (f : V -> V) e,
   (forall x, f x = x) ->
   f <$> e = e.
-Admitted.
-Lemma map_comp_law : forall A e B C (f:A->B) (g:B->C),
-  g <$> (f <$> e) = g ∘ f <$> e.
 Admitted. *)
+Lemma map_map_law' : forall A e B C (f:A->B) (g:B->C),
+  map' g (map' f e) = map' (g ∘ f) e.
+Proof.
+  intros. generalize dependent B. generalize dependent C.
+  induction e; intros; cbn; auto;
+  try solve [f_equal; rewrite IHe; rewrite option_map_comp_law; auto];
+  try solve [rewrite IHe1; rewrite IHe2; reflexivity].
+  rewrite IHe1; f_equal. rewrite IHe2.
+  rewrite option_map_comp_law; auto.
+Qed.
 
 
 Fixpoint bind' {A B : Type} (f : A -> tm' B) (e : tm' A) : tm' B :=
@@ -723,6 +730,15 @@ Proof.
   apply H.
 Qed.
 
+
+Lemma lift_map' : ∀ {A B} (e : tm' A) (f : A → B),
+  ↑(map' f e) = map' (option_map f) (↑e).
+Proof.
+  intros.
+  unfold lift. unfold LiftTm'.
+  repeat rewrite map_map_law'.
+  f_equal.
+Qed.
 
 Lemma subst_lift' : ∀ {A} (e : tm' A) v,
   <| (↑e) [0 := v] |> = e.

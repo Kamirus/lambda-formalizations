@@ -91,26 +91,6 @@ Ltac reason := repeat(
   | H : val_to_tm  ?v1 = val_to_tm  ?v2 |- _ => apply val_to_tm_injection  in H
   end).
 
-(* Lemma sim_j_inv : ∀ (j : J ␀) e term',
-  <{ j[e] }> ~ₑ term' →
-  ∃ j' e', j ~ⱼ j' /\ e ~ₑ e' /\ (term' = <| j'[e'] |> \/ term' = <| let e' in ↑j'[0] |>).
-Proof.
-  intros. inversion H; clear H; subst.
-  admit. admit. admit. admit. admit.
-  destruct j0, j; cbn in H0; inversion H0; clear H0; subst.
-  repeat eexists; eauto.
-  apply sim_val_inv in H2 as [v' [Hev Hv]]; subst. exists (J_arg' v'); inversion H1; clear H1; subst. repeat eexists; eauto. constructor.
-  repeat eexists; eauto.
-  inversion H0.
-  try destruct a;
-    try destruct a; 
-  try destruct a;
-  destruct j; inversion H0; clear H0; subst; cbn in *;
-  try solve [repeat eexists; eauto].
-  apply sim_val_inv in H1 as [v' [Hvv Hv]]; subst.
-  repeat eexists. constructor. apply (sim_tm_from_sim_val Hv). apply H2. auto.
-  repeat eexists. constructor.
-Qed. *)
 
 (* k[p] ~ e' -->'* k'[p'] *)
 Lemma plug_k_steps_to_similar_k' : ∀ (k : K ␀) (p : non ␀) term',
@@ -242,15 +222,37 @@ Proof.
   apply (multi_k' Hmulti2).
 Qed.
 
-(* requires ind_mut *)
-(* Lemma sim_lift : ∀ {A} {e e' B} {f : A → B},
+Lemma sim_map : ∀ {A} {e e' B} {f : A → B},
   e ~ₑ e' →
   map f e ~ₑ map' f e'.
 Proof.
-  intros A. induction e; intros; cbn; inversion H; clear H; subst; cbn; auto.
-  constructor.
-  constructor. apply (IHe _ (option_map f)).
-Qed. *)
+  induction e; intros; inversion H; clear H; subst; cbn; auto;
+  try solve [destruct j; inversion H0].
+  
+  destruct j; inversion H0; clear H0; subst.
+
+  inversion H1; clear H1; subst;
+  rename e'0 into e1'; rename e' into e2';
+  cbn; rewrite <- lift_map';
+  apply (sim_let (J_fun (map f e2)) (J_fun' (map' f e2')) (map f e1) (map' f e1')); auto.
+
+  inversion H1; clear H1; subst.
+  rename e'0 into e2';
+  cbn; reason; subst.
+  inversion Hv; clear Hv; subst. cbn in *.
+  remember (sim_let (J_arg <{ λv {map (option_map f) e} }>) (J_arg' <| λv' {map' (option_map f) e'} |>) (map f e2) (map' f e2')) as Hg eqn: HHg; clear HHg.
+  cbn in *.
+  rewrite map_map_law' in *.
+  rewrite option_map_comp_law in *.
+  rewrite option_map_some_law in *.
+  apply Hg; auto. constructor; cbn. constructor. eapply IHe1 in H. cbn in *. inversion H; clear H; subst. apply H3.
+
+  inversion H1; clear H1; subst; cbn in *; inversion H0; clear H0; subst. 
+  rename e'0 into e1'.
+  rename e' into e2'.
+  cbn; rewrite <- lift_map';
+  apply (sim_let (J_dol (map f e2)) (J_dol' (map' f e2')) (map f e1) (map' f e1')); auto.
+Qed.
 
 Lemma sim_plug_k : ∀ {A} (k : K A) k' e e',
   k ~ₖ k' →

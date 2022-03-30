@@ -45,3 +45,18 @@ Ltac inj H := injection H; intros; subst; clear H.
 
 Class Lift (F : Type → Type) := lift : ∀ {A}, F A → F ^A.
 Notation "↑ e" := (lift e) (at level 0).
+
+
+Lemma option_map_comp_law : ∀ A B C (f:A->B) (g:B->C),
+  option_map g ∘ option_map f = option_map (g ∘ f).
+Proof.
+  intros. apply functional_extensionality. intros. generalize dependent B. generalize dependent C.
+  induction x; intros; cbn; auto.
+Qed.
+
+Lemma option_map_some_law : ∀ {A B} (f : A → B),
+  option_map (option_map f ∘ Some) = option_map (Some ∘ f).
+Proof.
+  intros. apply functional_extensionality. intros. generalize dependent B.
+  induction x; intros; cbn; auto.
+Qed.
