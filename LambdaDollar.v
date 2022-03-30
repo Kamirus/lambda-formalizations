@@ -22,6 +22,13 @@ Definition val_to_tm {A} (v : val A) :=
   end.
 Coercion val_to_tm : val >-> tm.
 
+Lemma val_to_tm_injection : ∀ {A} (v1 v2 : val A),
+  val_to_tm v1 = val_to_tm v2 → 
+  v1 = v2.
+Proof.
+  intros. destruct v1, v2. cbn in H. injection H; intro H1; rewrite H1; reflexivity.
+Qed.
+
 Inductive non {A} :=
 | non_s_0 : tm ^A → non (* S₀ f. e *)
 | non_app : tm A → tm  A → non (* e   e *)
