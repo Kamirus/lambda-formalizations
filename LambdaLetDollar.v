@@ -1,4 +1,5 @@
 Require Export Common.
+Require Export Coq.Logic.FunctionalExtensionality.
 
 Inductive tm' {A} :=
 | tm_var' : A → tm'
@@ -108,6 +109,27 @@ Fixpoint bind' {A B : Type} (f : A -> tm' B) (e : tm' A) : tm' B :=
       | Some a => map' Some (f a)
       end) e2)
   end.
+
+Lemma bind_map_law' : ∀ {A B C} (f : B → tm' C) (g : A → B) e,
+  bind' f (map' g e) = bind' (λ a, f (g a)) e.
+Proof.
+  intros. generalize dependent B. generalize dependent C.
+  induction e; intros; cbn; auto;
+  try solve [f_equal; rewrite IHe; f_equal; apply functional_extensionality; intros [a|]; cbn; auto];
+  try solve [f_equal; apply IHe1 + apply IHe2].
+  rewrite IHe1; f_equal. rewrite IHe2.
+  f_equal; apply functional_extensionality; intros [a|]; cbn; auto.
+Qed.
+
+Lemma bind_pure' : ∀ {A} (e : tm' A),
+  bind' (λ a, <| var a |>) e = e.
+Proof.
+  induction e; cbn; auto;
+  try solve [f_equal; rewrite <- IHe at 2; f_equal; apply functional_extensionality; intros [a|]; cbn; auto];
+  try solve [f_equal; apply IHe1 + apply IHe2].
+  rewrite IHe1; f_equal. rewrite <- IHe2 at 2.
+  f_equal; apply functional_extensionality; intros [a|]; cbn; auto.
+Qed.
 
 (* Lemma bind_is_map : forall A e B (f:A->B),
   f <$> e = e >>= (fun v => tm_var (f v)).
@@ -692,4 +714,14 @@ Proof.
   eapply (multi_step); [idtac | apply IHmulti].
   apply step_t'.
   apply H.
+Qed.
+
+
+Lemma subst_lift' : ∀ {A} (e : tm' A) v,
+  <| (↑e) [0 := v] |> = e.
+Proof.
+  intro A.
+  unfold tm_subst0' .
+  unfold lift. unfold LiftTm'.
+  intros. rewrite bind_map_law'. apply bind_pure'.
 Qed.
