@@ -75,6 +75,12 @@ Notation "e1 e2" := (tm_app' e1 e2) (in custom λ_let_dollar_scope at level 10, 
 Notation "e1 '$' e2" := (tm_dol' e1 e2) (in custom λ_let_dollar_scope at level 80, right associativity).
 Notation "'let' e1 'in' e2" := (tm_let' e1 e2) (in custom λ_let_dollar_scope at level 70, right associativity).
 
+Lemma lambda_to_val' : ∀ {A} (e : tm' ^A),
+  <| λ e |> = <| λv' e |>.
+Proof.
+  reflexivity.
+Qed.
+
 
 Fixpoint map' {A B : Type} (f : A -> B) (e : tm' A) : tm' B :=
   match e with
@@ -489,7 +495,7 @@ Instance LiftJ' : Lift J' := @liftJ'.
 Fixpoint liftK' {A : Type} (k : K' A) : K' ^A :=
   match k with
   | K_nil' => K_nil'
-  | K_let' k1 e2 => K_let' (liftK' k1) (↑e2)
+  | K_let' k1 e2 => K_let' (liftK' k1) (map' (option_map Some) e2)
   end.
 Instance LiftK' : Lift K' := @liftK'.
 
@@ -517,7 +523,7 @@ Definition contract' (r : redex' ␀) : tm' ␀ :=
   | redex_let_beta' v e => <| e [0 := v] |>
 
   (* let x = (let y = S₀ f. e1 in e2) in e3  ~>  let y = S₀ f. e1 in let x = e2 in e3*)
-  | redex_let_assoc' e1 e2 e3 => <| let S₀ e1 in let e2 in ↑e3 |>
+  | redex_let_assoc' e1 e2 e3 => <| let S₀ e1 in let e2 in {map' (option_map Some) e3} |>
   end.
 
 Definition optional_step' e :=
@@ -567,7 +573,7 @@ Definition contr_shift' : ∀ (v : val' ␀) e, <| v $ S₀ e |> ~>' <| e [ 0 :=
 Definition contr_dol_let' : ∀ (v : val' ␀) e1 e2, <| v $ let S₀ e1 in e2 |> ~>' <| (λ {liftV' v} $ e2) $ S₀ e1 |> := λ v e1 e2, contr_tm' (redex_dol_let' v e1 e2).
 Definition contr_let' : ∀ (j : J' ␀) (p : non' ␀), <| j[p] |> ~>' <| let p in ↑j[0] |> := λ j p, contr_tm' (redex_let' j p).
 Definition contr_let_beta' : ∀ (v : val' ␀) e, <| let v in e |> ~>' <| e [ 0 := v ] |> := λ v e, contr_tm' (redex_let_beta' v e).
-Definition contr_let_assoc' : ∀ e1 e2 e3, <| let (let S₀ e1 in e2) in e3 |> ~>' <| let S₀ e1 in let e2 in ↑e3 |> := λ e1 e2 e3, contr_tm' (redex_let_assoc' e1 e2 e3).
+Definition contr_let_assoc' : ∀ e1 e2 e3, <| let (let S₀ e1 in e2) in e3 |> ~>' <| let S₀ e1 in let e2 in {map' (option_map Some) e3} |> := λ e1 e2 e3, contr_tm' (redex_let_assoc' e1 e2 e3).
 Global Hint Resolve step_contr' contr_beta' contr_dollar' contr_shift' contr_dol_let' contr_let' contr_let_beta' contr_let_assoc' : core.
 
 Fixpoint eval' i e :=
@@ -604,22 +610,22 @@ Section Examples.
   Example from_K_to_stuck' : eval' 5 ej123 = <| 
     let S₀ 0 in
     let
-      let ↑j3[0]
-      in ↑↑j2[1]
-    in ↑↑j1[1]
-  |>. Proof. auto. Qed.
+        let ↑j3[0]
+        in ↑↑j2[0]
+    in ↑↑j1[0]
+  |>. Proof. cbn. auto. Qed.
 
   Example ex_dol_let : eval' 6 <| _id $ ej123 |> = <| 
     (λ ↑_id $ 
       let
         let ↑j3[0]
-        in ↑↑j2[1]
-      in ↑↑j1[1]
+        in ↑↑j2[0]
+      in ↑↑j1[0]
     ) $ S₀ 0
   |>. Proof. cbn. auto. Qed.
 
   Example ex_shift : eval' 7 <| _id $ ej123 |> = <|
-    λ ↑_id $ let (let ↑j3[0] in ↑↑j2[1]) in ↑↑j1[1]
+    λ ↑_id $ let (let ↑j3[0] in ↑↑j2[0]) in ↑↑j1[0]
   |>. Proof. cbn. auto. Qed.
 
   Compute (decompose' (eval' 7 <| _id $ ej123 |>)).
@@ -799,4 +805,13 @@ Proof.
   unfold tm_subst0' .
   unfold lift. unfold LiftTm'.
   intros. rewrite bind_map_law'. apply bind_pure'.
+Qed.
+
+
+Theorem plug_k_let_bubbles_up_s_0 : ∀ (k : K' ␀) e1 e2,
+  <| k [let S₀ e1 in e2] |> -->'* <| let S₀ e1 in ↑k[e2] |>.
+Proof.
+  induction k; intros; cbn; auto.
+  eapply multi_trans. eapply multi_let'. apply IHk.
+  apply multi_contr'. apply contr_let_assoc'.
 Qed.

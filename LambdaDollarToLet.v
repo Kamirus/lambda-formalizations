@@ -52,6 +52,10 @@ Global Hint Constructors sim_val : core.
 Global Hint Constructors sim_non : core.
 Global Hint Constructors sim_tm : core.
 
+Axiom sim_val_eta : ∀ {A} (v : val A) v',
+  v ~ᵥ v' →
+  <{ λv {liftV v} $ 0 }> ~ᵥ v'.
+
 Lemma sim_tm_from_sim_val : ∀ {A v} {v' : val' A},
   v ~ᵥ v' →
   v ~ₑ v'.
@@ -222,6 +226,7 @@ Proof.
   apply (multi_k' Hmulti2).
 Qed.
 
+
 Lemma sim_map : ∀ {A} {e e' B} {f : A → B},
   e ~ₑ e' →
   map f e ~ₑ map' f e'.
@@ -305,6 +310,14 @@ Proof.
 Qed.
 Global Hint Resolve sim_bind : core.
 
+Lemma sim_plug_j : ∀ {A} (j : J A) j' e e',
+  j ~ⱼ j' →
+  e ~ₑ e' →
+  <{ j[e] }> ~ₑ <| j'[e'] |>.
+Proof with auto.
+  intros; inversion H; clear H; subst; cbn...
+Qed.
+
 Lemma sim_plug_k : ∀ {A} (k : K A) k' e e',
   k ~ₖ k' →
   e ~ₑ e' →
@@ -323,6 +336,14 @@ Proof.
   apply sim_plug_k; auto.
 Qed.
 
+Lemma sim_lift : ∀ {A} {e : tm A} {e'},
+   e ~ₑ  e' →
+  ↑e ~ₑ ↑e'.
+Proof.
+  intros. unfold lift. unfold LiftTm'. unfold LiftTm. apply (sim_map H).
+Qed.
+Global Hint Resolve sim_lift : core.
+
 Lemma sim_lift_val : ∀ {A} {v : val A} {v'},
   v ~ᵥ v' →
   liftV v ~ᵥ liftV' v'.
@@ -330,6 +351,31 @@ Proof.
   intros. inversion H; clear H; subst. cbn. constructor.
   inversion H0; clear H0; subst. constructor. apply (sim_map H2).
 Qed.
+Global Hint Resolve sim_lift_val : core.
+
+Lemma sim_lift_j : ∀ {A} {j : J A} {j'},
+   j ~ⱼ  j' →
+  ↑j ~ⱼ ↑j'.
+Proof.
+  intros. inversion H; clear H; subst; cbn; auto. constructor. destruct v, v'; auto.
+Qed.
+Global Hint Resolve sim_lift_j : core.
+
+Lemma sim_lift_k : ∀ {A} {k : K A} {k'},
+   k ~ₖ  k' →
+  ↑k ~ₖ ↑k'.
+Proof with auto.
+  intros; induction H; cbn...
+
+  assert (map' (option_map Some) <| ↑j'[0] |> = <| ↑↑j'[0] |>) as HH.
+    inversion H; clear H; subst; cbn;
+    repeat rewrite <- lift_val_to_tm';
+    unfold lift; unfold LiftTm';
+    repeat rewrite map_map_law'...
+  rewrite HH.
+  constructor...
+Qed.
+Global Hint Resolve sim_lift_k : core.
 
 Lemma sim_subst_lemma : ∀ e e' v (v' : val' ␀),
   e ~ₑ e' →
@@ -341,20 +387,23 @@ Proof.
   intros [n|]; try destruct n; cbn. auto.
 Qed.
 
-Theorem main : ∀ (k' : K' ␀) e' k e,
+
+Lemma k_inv_inner' : ∀ (k : K ␀) (k' : K' ␀),
   k ~ₖ k' →
-  e ~ₑ e' → ∃ ek,
-  <| k' [S₀ e'] |> -->'* <| let S₀ e' in ek |> /\
-  <{ ↑k[0] }> ~ₑ ek.
+  (k = K_nil /\ k' = K_nil') \/
+  (∃ (k2 : K ␀) (k2' : K' ␀) (j2 : J ␀) (j2' : J' ␀),
+    k2 ~ₖ k2' /\
+    j2 ~ⱼ j2' /\
+    (∀ (e  : tm ^␀), <{ ↑k[e ] }> = <{ ↑k2[↑j2[e ]] }>) /\
+    (∀ (e' : tm' ␀), <| k'[e'] |> = <| k2'[let e' in ↑j2'[0]] |>)).
 Proof with auto.
-  induction k'; intros; inversion H; clear H; subst; cbn.
-  - repeat eexists.
-    apply multi_contr'. apply contr_shift'. apply sim_subst_lemma... admit. (* ADD ETA-DOLLAR-EXPANDED VALUES TO SIM *)
-  - destruct (IHk' _ _ _ _ _ H H6 H1) as [term' [IH1 IH2]].
-    inversion IH1; clear IH1; subst. 
-    repeat eexists.
-    
-Admitted.
+  induction k; intros; inversion H; clear H; subst; cbn; auto.
+  destruct (IHk _ H4) as [[Hk Hk'] | [k2 [k2' [j2 [j2' [Hk2 [Hj2 [Hke Hke']]]]]]]]; subst; right.
+  - exists K_nil, K_nil'. repeat eexists...
+  - exists (K_cons j k2), (K_let' k2' <| ↑j'[0] |>), j2, j2'; repeat split; auto; intros.
+    + rewrite Hke in *. reflexivity.
+    + rewrite Hke' in *. reflexivity.
+Qed.
 
 Theorem dollar_to_let_simulation_step : ∀ e1 e2 e1',
   e1 --> e2 →
@@ -368,7 +417,6 @@ Proof with auto.
   apply plug_kt_steps_to_similar_kt' in Hsim as [k' [t' [p' [Hmulti [Hk [Ht Hp]]]]]].
   inversion Hp; clear Hp; subst.
   rewrite <- Hrp in *. clear Hrp p.
-
   destruct r; cbn in *.
   - destruct v.
     inversion H; clear H; subst. rewrite <- H2 in *. clear H2 p'. 
@@ -424,24 +472,24 @@ Proof with auto.
     inversion Ht'; clear Ht'; subst. inversion H5; clear H5; subst. inversion Hp'; clear Hp'; subst. cbn in *.
     inversion H; clear H; subst; try solve [destruct j; inversion H0].
     rewrite <- H1 in *. clear H1 p''.
-    repeat eexists.
-    apply (multi_trans Hmulti).
-    eapply multi_k'. eapply multi_t'.
-    apply (multi_trans Hmulti').
-    admit.
-    apply sim_plug_k... apply sim_plug_t...
-    cbn.
-    apply
-        admit. 
-      * apply (multi_trans Hmulti).
-        apply (multi_k' (multi_t' (multi_contr' (contr_beta' _ _)))).
-      * apply sim_top_cons; auto.
-        apply sim_subst_lemma; auto.
-        constructor.
-        apply sim_tm_from_sim_val. apply sim_lift_val. apply H0.
-        apply sim_plug_k; auto.
-        admit.
+    destruct (k_inv_inner' _ _ H4) as [[Hk0 Hk'0] | [k2 [k2' [j2 [j2' [Hk2 [Hj2 [Hke Hke']]]]]]]]; subst.
+    + repeat eexists.
+      apply (multi_trans Hmulti).
+      eapply multi_k'. eapply multi_t'.
+      apply (multi_trans Hmulti').
+      apply multi_contr'. apply contr_shift'.
+      apply sim_plug_k... apply sim_plug_t... apply sim_subst_lemma... cbn. apply sim_val_eta...
+    + repeat eexists.
+      apply (multi_trans Hmulti).
+      eapply multi_k'. eapply multi_t'.
+      rewrite Hke' in *.
+      apply (multi_trans Hmulti').
+      eapply multi_trans.
+      eapply multi_delim'.
+      apply (plug_k_let_bubbles_up_s_0 _ _ _).
+      eapply multi_contr_multi'. apply contr_dol_let'.
+      apply multi_contr'. rewrite lambda_to_val'. apply contr_shift'. 
+      apply sim_plug_k... apply sim_plug_t... apply sim_subst_lemma...
+      rewrite Hke.
+      constructor. constructor. constructor... apply sim_plug_k... apply sim_plug_j...
 Qed.
-(* v $ K[S₀ f. e] -->'* e [f := λ x. v $ K'[x]] *)
-(* Lemma aux :
-  <{ {val_abs v} $ {plugK k <{ S₀ e }>} }> *)
