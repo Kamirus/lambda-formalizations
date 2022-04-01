@@ -92,6 +92,12 @@ Fixpoint map' {A B : Type} (f : A -> B) (e : tm' A) : tm' B :=
   | <| let e1 in e2 |> => tm_let' (map' f e1) (map' (option_map f) e2)
   end.
 
+Lemma map_val_is_val' : ∀ {A B} (v : val' A) (f : A → B),
+  ∃ w, map' f (val_to_tm' v) = val_to_tm' w.
+Proof.
+  intros. destruct v; cbn. eexists <| λv' _ |>. reflexivity.
+Qed.
+
 (* Lemma map_id_law : forall {V} (f : V -> V) e,
   (forall x, f x = x) ->
   f <$> e = e.
@@ -129,6 +135,12 @@ Fixpoint bind' {A B : Type} (f : A -> tm' B) (e : tm' A) : tm' B :=
       | Some a => map' Some (f a)
       end) e2)
   end.
+
+Lemma bind_val_is_val' : ∀ {A B} (v : val' A) (f : A → tm' B),
+  ∃ w, bind' f (val_to_tm' v) = val_to_tm' w.
+Proof.
+  intros. destruct v; cbn. eexists <| λv' _ |>. reflexivity.
+Qed.
 
 Lemma bind_map_law' : ∀ {A B C} (f : B → tm' C) (g : A → B) e,
   bind' f (map' g e) = bind' (λ a, f (g a)) e.
@@ -790,7 +802,7 @@ Proof.
   intros.
   unfold lift. unfold LiftTm'.
   rewrite map_bind_law'. reflexivity.
-  Qed.
+Qed.
 
 Lemma lift_tm_abs' : ∀ {A} (e : tm' ^A),
   <| λ {map' (option_map Some) e} |> = ↑<| λ e |>.
@@ -805,6 +817,13 @@ Proof.
   unfold tm_subst0' .
   unfold lift. unfold LiftTm'.
   intros. rewrite bind_map_law'. apply bind_pure'.
+Qed.
+
+Lemma bind_var_subst_lift' : ∀ {A} (e : tm' A) v,
+  bind' (var_subst' (val_to_tm' v)) (↑e) = e.
+Proof.
+  intros. change (bind' (var_subst' v) (↑e)) with <| (↑e) [0 := v] |>.
+  apply subst_lift'.
 Qed.
 
 

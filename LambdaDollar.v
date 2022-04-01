@@ -70,6 +70,12 @@ Notation "'S₀' e" := (tm_s_0 e)
 Notation "e1 e2" := (tm_app e1 e2) (in custom λ_dollar_scope at level 10, left associativity).
 Notation "e1 '$' e2" := (tm_dol e1 e2) (in custom λ_dollar_scope at level 80, right associativity).
 
+Lemma lambda_to_val : ∀ {A} (e : tm ^A),
+  <{ λ e }> = <{ λv e }>.
+Proof.
+  reflexivity.
+Qed.
+
 
 Fixpoint map {A B : Type} (f : A -> B) (e : tm A) : tm B :=
   match e with
@@ -79,6 +85,21 @@ Fixpoint map {A B : Type} (f : A -> B) (e : tm A) : tm B :=
   | <{ e1   e2 }> => <{ {map f e1}   {map f e2} }>
   | <{ e1 $ e2 }> => <{ {map f e1} $ {map f e2} }>
   end.
+
+Lemma map_val_is_val : ∀ {A B} (v : val A) (f : A → B),
+  ∃ w, map f (val_to_tm v) = val_to_tm w.
+Proof.
+  intros. destruct v; cbn. eexists <{ λv _ }>. reflexivity.
+Qed.
+
+Lemma map_map_law : forall A e B C (f:A->B) (g:B->C),
+  map g (map f e) = map (g ∘ f) e.
+Proof.
+  intros. generalize dependent B. generalize dependent C.
+  induction e; intros; cbn; auto;
+  try solve [f_equal; rewrite IHe; rewrite option_map_comp_law; auto];
+  try solve [rewrite IHe1; rewrite IHe2; reflexivity].
+Qed.
 
 (* Notation "f <$> a" := (map f a) (at level 40, left associativity). *)
 
@@ -107,6 +128,40 @@ Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
       | Some a => map Some (f a)
       end) e')
   end.
+
+Lemma bind_val_is_val : ∀ {A B} (v : val A) (f : A → tm B),
+  ∃ w, bind f (val_to_tm v) = val_to_tm w.
+Proof.
+  intros. destruct v; cbn. eexists <{ λv _ }>. reflexivity.
+Qed.
+
+Lemma bind_map_law : ∀ {A B C} (f : B → tm C) (g : A → B) e,
+  bind f (map g e) = bind (λ a, f (g a)) e.
+Proof.
+  intros. generalize dependent B. generalize dependent C.
+  induction e; intros; cbn; auto;
+  try solve [f_equal; rewrite IHe; f_equal; apply functional_extensionality; intros [a|]; cbn; auto];
+  try solve [f_equal; apply IHe1 + apply IHe2].
+Qed.
+
+Lemma bind_pure : ∀ {A} (e : tm A),
+  bind (λ a, <{ var a }>) e = e.
+Proof.
+  induction e; cbn; auto;
+  try solve [f_equal; rewrite <- IHe at 2; f_equal; apply functional_extensionality; intros [a|]; cbn; auto];
+  try solve [f_equal; apply IHe1 + apply IHe2].
+Qed.
+
+Lemma map_bind_law : ∀ {A B C} (f : A → tm B) (g : B → C) e,
+  bind (map g ∘ f) e = map g (bind f e).
+Proof.
+  intros; generalize dependent B; generalize dependent C; induction e; intros; cbn; auto;
+  try solve [
+    rewrite <- IHe; repeat f_equal; apply functional_extensionality; intros [a|]; auto; cbn;
+    change ((map g ∘ f) a) with (map g (f a));
+    repeat rewrite map_map_law; f_equal];
+  try solve [f_equal; apply IHe1 + apply IHe2].
+Qed.
 
 (* Notation "e >>= f" := (bind f e) (at level 20, left associativity). *)
 
@@ -332,6 +387,12 @@ Definition liftV {A : Type} (v : val A) : val ^A :=
   | val_abs e => val_abs (map (option_map Some) e)
   end.
 
+Lemma lift_val_to_tm : ∀ {A} (v : val A),
+  ↑ (val_to_tm v) = val_to_tm (liftV v).
+Proof.
+  intros. destruct v; cbn. reflexivity.
+Qed.
+
 Definition liftJ {A : Type} (j : J A) : J ^A := 
   match j with
   | J_fun e => J_fun (↑e)
@@ -380,25 +441,46 @@ Global Hint Constructors step : core.
 
 Notation "e1 -->* e2" := (multi step e1 e2) (at level 40).
 
+Lemma step_contr : ∀ {e1 e2},
+  e1 ~> e2 →
+  e1 --> e2.
+Proof.
+  intros.
+  apply (step_tm K_nil T_nil e1 e2).
+  assumption.
+Qed.
+Lemma multi_contr : ∀ {e1 e2},
+  e1 ~> e2 →
+  e1 -->* e2.
+Proof.
+  intros. apply (multi_step _ _ _ _ (step_contr H)); auto.
+Qed.
+Lemma multi_contr_multi : ∀ {e1 e2 e3},
+  e1 ~> e2 →
+  e2 -->* e3 →
+  e1 -->* e3.
+Proof.
+  intros. eapply multi_step; try eapply (step_tm K_nil T_nil); cbn; eassumption.
+Qed.
+
 Lemma contr_beta : ∀ e (v : val ␀),
   <{ (λ e) v }> ~> <{ e [0 := v] }>.
 Proof.
   intros. change <{ (λ e) v }> with (redex_to_term (redex_beta <{ λv e }> v)).
   constructor.
 Qed.
-
 Lemma contr_dollar : ∀ (v1 v2 : val ␀),
   <{ v1 $ v2 }> ~> <{ v1 v2 }>.
 Proof.
   intros. change <{ v1 $ v2 }> with (redex_to_term (redex_dollar v1 v2)).
   constructor.
 Qed.
-
 Lemma contr_shift : ∀ (v : val ␀) k e,
   <{ v $ k[S₀ e] }> ~> <{ e [0 := λv {liftV v} $ ↑k[0] ] }>.
 Proof.
   intros. change <{ v $ k[S₀ e] }> with (redex_to_term (redex_shift v k e)). constructor.
 Qed.
+Global Hint Resolve step_contr contr_beta contr_dollar contr_shift : core.
 
 Lemma no_contr_lambda : ∀ e e2, ~ <{ λ e }> ~> e2.
 Proof.
@@ -456,4 +538,129 @@ Lemma redex_is_non : ∀ {A} r, ∃ p, @redex_to_term A r = non_to_tm p.
 Proof.
   intros. destruct r; cbn;
   try solve [try destruct j; eexists (non_app _ _) + eexists (non_dol _ _); reflexivity].
+Qed.
+
+
+Lemma step_j : ∀ {j : J ␀} {e1 e2},
+  e1 --> e2 →
+  <{ j[e1] }> --> <{ j[e2] }>.
+Proof.
+  intros. generalize dependent j.
+  induction H; auto; intros.
+  apply (step_tm (K_cons j k) t e1 e2).
+  apply H.
+Qed.
+
+Lemma multi_j : ∀ {j : J ␀} {e1 e2},
+  e1 -->* e2 →
+  <{ j[e1] }> -->* <{ j[e2] }>.
+Proof.
+  intros. generalize dependent j.
+  induction H; auto; intros.
+  eapply (multi_step); [idtac | apply IHmulti].
+  apply step_j.
+  apply H.
+Qed.
+
+Lemma step_delim : ∀ {v : val ␀} {e1 e2},
+  e1 --> e2 →
+  <{ v $ e1 }> --> <{ v $ e2 }>.
+Proof.
+  intros. generalize dependent v.
+  induction H; auto; intros.
+  apply (step_tm K_nil (T_cons v k t) e1 e2).
+  apply H.
+Qed.
+
+Lemma multi_delim : ∀ {v : val ␀} {e1 e2},
+  e1 -->* e2 →
+  <{ v $ e1 }> -->* <{ v $ e2 }>.
+Proof.
+  intros. generalize dependent v.
+  induction H; auto; intros.
+  eapply (multi_step); [idtac | apply IHmulti].
+  apply step_delim.
+  apply H.
+Qed.
+
+Lemma step_k : ∀ {e1 e2} {k : K ␀},
+  e1 --> e2 →
+  <{ k[e1] }> --> <{ k[e2] }>.
+Proof.
+  intros e1 e2 k; generalize dependent e1; generalize dependent e2.
+  induction k; auto; intros.
+  cbn. apply step_j. apply IHk. apply H.
+Qed.
+
+Lemma multi_k : ∀ {e1 e2} {k : K ␀},
+  e1 -->* e2 →
+  <{ k[e1] }> -->* <{ k[e2] }>.
+Proof.
+  intros. generalize dependent k.
+  induction H; auto; intros.
+  eapply (multi_step); [idtac | apply IHmulti].
+  apply step_k.
+  apply H.
+Qed.
+
+Lemma step_t : ∀ {e1 e2} {t : T ␀},
+  e1 --> e2 →
+  <{ t[e1] }> --> <{ t[e2] }>.
+Proof.
+  intros e1 e2 t; generalize dependent e1; generalize dependent e2.
+  induction t; auto; intros.
+  cbn. apply step_delim. apply step_k. apply IHt. apply H.
+Qed.
+
+Lemma multi_t : ∀ {e1 e2} {t : T ␀},
+  e1 -->* e2 →
+  <{ t[e1] }> -->* <{ t[e2] }>.
+Proof.
+  intros. generalize dependent t.
+  induction H; auto; intros.
+  eapply (multi_step); [idtac | apply IHmulti].
+  apply step_t.
+  apply H.
+Qed.
+
+
+Lemma lift_map : ∀ {A B} (e : tm A) (f : A → B),
+  ↑(map f e) = map (option_map f) (↑e).
+Proof.
+  intros.
+  unfold lift. unfold LiftTm.
+  repeat rewrite map_map_law.
+  f_equal.
+Qed.
+
+Lemma bind_lift : ∀ {A B} e (f : ^A → tm B),
+  bind f (↑e) = bind (f ∘ Some) e.
+Proof.
+  intros.
+  unfold lift. unfold LiftTm.
+  rewrite bind_map_law. f_equal.
+Qed.
+
+Lemma lift_bind : ∀ {A B} e (f : A → tm B),
+  ↑(bind f e) = bind (lift ∘ f) e.
+Proof.
+  intros.
+  unfold lift. unfold LiftTm.
+  rewrite map_bind_law. reflexivity.
+Qed.
+
+Lemma subst_lift : ∀ {A} (e : tm A) v,
+  <{ (↑e) [0 := v] }> = e.
+Proof.
+  intro A.
+  unfold tm_subst0 .
+  unfold lift. unfold LiftTm.
+  intros. rewrite bind_map_law. apply bind_pure.
+Qed.
+
+Lemma bind_var_subst_lift : ∀ {A} (e : tm A) v,
+  bind (var_subst (val_to_tm v)) (↑e) = e.
+Proof.
+  intros. change (bind (var_subst v) (↑e)) with <{ (↑e) [0 := v] }>.
+  apply subst_lift.
 Qed.
