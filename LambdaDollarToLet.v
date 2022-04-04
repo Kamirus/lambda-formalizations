@@ -431,7 +431,7 @@ Proof with auto.
     + rewrite Hke' in *. reflexivity.
 Qed.
 
-Theorem dollar_to_let_simulation_step : ∀ e1 e2 e1',
+Theorem dollar_step_to_let_multi : ∀ e1 e2 e1',
   e1 --> e2 →
   e1 ~ₑ e1' →
   ∃ e2', e1' -->'* e2' /\ e2 ~ₑ e2'.
@@ -557,4 +557,18 @@ Proof with auto.
   }
 Qed.
 
-Axiom multi_det : ∀ x y z, x -->* y /\ x -->* z → y = z.
+Theorem dollar_multi_to_let_multi : ∀ e1 e2 e1',
+  e1 -->* e2 →
+  e1 ~ₑ e1' →
+  ∃ e2', e1' -->'* e2' /\ e2 ~ₑ e2'.
+Proof.
+  intros. generalize dependent e1'.
+  induction H; intros;
+  try solve [repeat eexists; auto].
+  
+  eapply (dollar_step_to_let_multi _ _ _ H) in H1 as Hstep. destruct Hstep as [e2' [Hmulti1 Hsim1]].
+  apply IHmulti in Hsim1 as Hstep. destruct Hstep as [e3' [Hmulti2 Hsim2]].
+  repeat eexists.
+  - apply (multi_trans Hmulti1 Hmulti2).
+  - assumption.
+Qed.
