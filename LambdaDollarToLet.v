@@ -15,8 +15,8 @@ Reserved Notation "k ~ₖ k'" (at level 40).
 Reserved Notation "t ~ₜ t'" (at level 40).
 Inductive sim_tm {A} : tm A → tm' A → Prop :=
 | sim_var  : ∀ a, <{ var a }> ~ₑ <| var a |>
-| sim_abs  : ∀ e e', e ~ₑ e' → <{ λ  e }> ~ₑ <| λ  e' |>
-| sim_s_0  : ∀ e e', e ~ₑ e' → <{ S₀ e }> ~ₑ <| S₀ e' |>
+| sim_abs  : ∀ e e', e ~ₑ e' → <{ λ  e }> ~ₑ <| λ   e' |>
+| sim_s_0  : ∀ e e', e ~ₑ e' → <{ S₀ e }> ~ₑ <| S₀, e' |>
 | sim_app  : ∀ e1 e2 e1' e2', e1 ~ₑ e1' → e2 ~ₑ e2' → <{ e1   e2 }> ~ₑ <| e1'   e2' |>
 | sim_dol  : ∀ e1 e2 e1' e2', e1 ~ₑ e1' → e2 ~ₑ e2' → <{ e1 $ e2 }> ~ₑ <| e1' $ e2' |>
 | sim_eta  : ∀ (v : val A) (v' : val' A),
@@ -65,7 +65,7 @@ Lemma sim_tm_from_sim_val : ∀ {A v} {v' : val' A},
   v ~ᵥ v' →
   v ~ₑ v'.
 Proof.
-  intros. destruct v, v'. inversion H; clear H; subst. assumption.
+  intros. destruct v, v'; inversion H; clear H; subst; assumption.
 Qed.
 Global Hint Resolve sim_tm_from_sim_val : core.
 
@@ -81,7 +81,7 @@ Lemma sim_non_inv : ∀ {A} (p : non A) (e' : tm' A),
   p ~ₑ e' → ∃ (p' : non' A), e' = p' /\ p ~ₚ p'.
 Proof with split; cbn; auto; repeat constructor; assumption.
   intros. destruct p; inversion H; clear H; subst.
-  exists (non_s_0' e'0)...
+  exists (non_app' <| S₀ |> <| λ e'0 |>)...
   exists (non_app' e1' e2')...
   exists (non_let' e1' <| 0 ↑e2' |>)...
   exists (non_let' e2' <| {liftV' v1'} 0|>)...
@@ -506,6 +506,16 @@ Proof with auto.
           rewrite bind_var_subst_lift.
           rewrite bind_var_subst_lift'.
           apply sim_plug_k... apply sim_plug_t...
+      * inversion Hv0; clear Hv0; subst. cbn in *.
+        inversion H; clear H; subst. 
+        rewrite H2 in *. clear v'0 H2. clear v1 H0.
+        repeat eexists.
+        - apply (multi_trans Hmulti).
+          eapply multi_k'. eapply multi_t'.
+          apply (multi_contr' (contr_let_beta' _ _)).
+        - apply sim_plug_k... apply sim_plug_t...
+          cbn. rewrite <- lift_val_to_tm. rewrite bind_var_subst_lift.
+          apply (sim_eta_dol v v0 val_s_0' v')...
   }
 
   (* redex_dollar *)
@@ -539,7 +549,8 @@ Proof with auto.
       - apply (multi_trans Hmulti).
         eapply multi_k'. eapply multi_t'.
         apply (multi_trans Hmulti').
-        apply multi_contr'. apply contr_shift'.
+        apply (multi_contr_multi' (contr_shift' v' <| λv' e' |>)).
+        apply (multi_contr' (contr_beta' _ _)).
       - apply sim_plug_k... apply sim_plug_t... apply sim_subst_lemma... cbn. constructor. apply sim_eta...
     + repeat eexists.
       - apply (multi_trans Hmulti).
@@ -549,8 +560,9 @@ Proof with auto.
         eapply multi_trans.
         eapply multi_delim'.
         apply (plug_k_let_bubbles_up_s_0 _ _ _).
-        eapply multi_contr_multi'. apply contr_dol_let'.
-        apply multi_contr'. rewrite lambda_to_val'. apply contr_shift'. 
+        eapply multi_contr_multi'. rewrite lambda_to_val'. apply contr_dol_let'.
+        eapply multi_contr_multi'. rewrite lambda_to_val'. apply contr_shift'.
+        apply multi_contr'. apply contr_beta'. 
       - apply sim_plug_k... apply sim_plug_t... apply sim_subst_lemma...
         rewrite Hke.
         constructor. constructor. constructor... apply sim_plug_k... apply sim_plug_j...

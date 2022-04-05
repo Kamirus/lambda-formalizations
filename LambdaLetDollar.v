@@ -3,8 +3,8 @@ Require Export Coq.Logic.FunctionalExtensionality.
 
 Inductive tm' {A} :=
 | tm_var' : A → tm'
+| tm_s_0' : tm' (* S₀ *)
 | tm_abs' : @tm' ^A → tm' (* λ  x. e *)
-| tm_s_0' : @tm' ^A → tm' (* S₀ f. e *)
 | tm_app' : tm' → tm' → tm' (* e   e *)
 | tm_dol' : tm' → tm' → tm' (* e $ e *)
 | tm_let' : tm' → @tm' ^A → tm' (* let x = e1 in e2 *)
@@ -14,6 +14,7 @@ Global Hint Constructors tm' : core.
 
 Inductive val' {A} :=
 | val_abs' : @tm' ^A → val'
+| val_s_0' : val'
 .
 Arguments val' A : clear implicits.
 Global Hint Constructors val' : core.
@@ -21,6 +22,7 @@ Global Hint Constructors val' : core.
 Definition val_to_tm' {A} (v : val' A) := 
   match v with
   | val_abs' e => tm_abs' e
+  | val_s_0' => tm_s_0'
   end.
 Coercion val_to_tm' : val' >-> tm'.
 
@@ -28,11 +30,11 @@ Lemma val_to_tm_injection' : ∀ {A} (v1 v2 : val' A),
   val_to_tm' v1 = val_to_tm' v2 → 
   v1 = v2.
 Proof.
-  intros. destruct v1, v2. cbn in H. injection H; intro H1; rewrite H1; reflexivity.
+  intros. destruct v1, v2; cbn in H; auto;
+  try solve [inversion H; auto].
 Qed.
 
 Inductive non' {A} :=
-| non_s_0' : tm' ^A → non' (* S₀ f. e *)
 | non_app' : tm' A → tm'  A → non' (* e   e *)
 | non_dol' : tm' A → tm'  A → non' (* e $ e *)
 | non_let' : tm' A → tm' ^A → non' (* let x = e1 in e2 *)
@@ -43,7 +45,6 @@ Global Hint Constructors non' : core.
 
 Definition non_to_tm' {A} (p : non' A) := 
   match p with
-  | non_s_0' e => tm_s_0' e
   | non_app' e1 e2 => tm_app' e1 e2
   | non_dol' e1 e2 => tm_dol' e1 e2
   | non_let' e1 e2 => tm_let' e1 e2
@@ -67,10 +68,11 @@ Notation "'λv'' e" := (val_abs' e)
     (in custom λ_let_dollar_scope at level 90,
       e custom λ_let_dollar_scope at level 99,
       right associativity).
-Notation "'S₀' e" := (tm_s_0' e)
+Notation "'S₀,' e" := (tm_app' tm_s_0' (tm_abs' e))
     (in custom λ_let_dollar_scope at level 90,
       e custom λ_let_dollar_scope at level 99,
       right associativity).
+Notation "'S₀'" := (tm_s_0').
 Notation "e1 e2" := (tm_app' e1 e2) (in custom λ_let_dollar_scope at level 10, left associativity).
 Notation "e1 '$' e2" := (tm_dol' e1 e2) (in custom λ_let_dollar_scope at level 80, right associativity).
 Notation "'let' e1 'in' e2" := (tm_let' e1 e2) (in custom λ_let_dollar_scope at level 70, right associativity).
@@ -85,8 +87,8 @@ Qed.
 Fixpoint map' {A B : Type} (f : A -> B) (e : tm' A) : tm' B :=
   match e with
   | <| var a |> => <| var {f a} |>
+  | <| S₀ |> => <| S₀ |>
   | <| λ  e' |> => <| λ  {map' (option_map f) e'} |>
-  | <| S₀ e' |> => <| S₀ {map' (option_map f) e'} |>
   | <| e1   e2 |> => <| {map' f e1}   {map' f e2} |>
   | <| e1 $ e2 |> => <| {map' f e1} $ {map' f e2} |>
   | <| let e1 in e2 |> => tm_let' (map' f e1) (map' (option_map f) e2)
@@ -95,13 +97,11 @@ Fixpoint map' {A B : Type} (f : A -> B) (e : tm' A) : tm' B :=
 Lemma map_val_is_val' : ∀ {A B} (v : val' A) (f : A → B),
   ∃ w, map' f (val_to_tm' v) = val_to_tm' w.
 Proof.
-  intros. destruct v; cbn. eexists <| λv' _ |>. reflexivity.
+  intros. destruct v; cbn.
+  - eexists <| λv' _ |>. reflexivity.
+  - exists val_s_0'; reflexivity.
 Qed.
 
-(* Lemma map_id_law : forall {V} (f : V -> V) e,
-  (forall x, f x = x) ->
-  f <$> e = e.
-Admitted. *)
 Lemma map_map_law' : forall A e B C (f:A->B) (g:B->C),
   map' g (map' f e) = map' (g ∘ f) e.
 Proof.
@@ -117,14 +117,10 @@ Qed.
 Fixpoint bind' {A B : Type} (f : A -> tm' B) (e : tm' A) : tm' B :=
   match e with
   | <| var a |> => f a
+  | <| S₀ |> => <| S₀ |>
   | <| e1   e2 |> => <| {bind' f e1}   {bind' f e2} |>
   | <| e1 $ e2 |> => <| {bind' f e1} $ {bind' f e2} |>
   | <| λ  e' |> => tm_abs' (bind' (fun a' => 
-      match a' with
-      | None   => tm_var' None
-      | Some a => map' Some (f a)
-      end) e')
-  | <| S₀ e' |> => tm_s_0' (bind' (fun a' => 
       match a' with
       | None   => tm_var' None
       | Some a => map' Some (f a)
@@ -139,7 +135,9 @@ Fixpoint bind' {A B : Type} (f : A -> tm' B) (e : tm' A) : tm' B :=
 Lemma bind_val_is_val' : ∀ {A B} (v : val' A) (f : A → tm' B),
   ∃ w, bind' f (val_to_tm' v) = val_to_tm' w.
 Proof.
-  intros. destruct v; cbn. eexists <| λv' _ |>. reflexivity.
+  intros. destruct v; cbn.
+  - eexists <| λv' _ |>. reflexivity.
+  - eexists val_s_0'. reflexivity.
 Qed.
 
 Lemma bind_map_law' : ∀ {A B C} (f : B → tm' C) (g : A → B) e,
@@ -187,14 +185,6 @@ Proof.
   apply functional_extensionality; intros [a|]; auto.
 Qed.
 
-(* Lemma bind_assoc' : ∀ {A B C} (f : A → tm' B) (g : B → tm' C) e,
-  bind' g (bind' f e) = bind' (λ a, bind' g (f a)) e.
-Proof.
-  intros; generalize dependent B; generalize dependent C; induction e; intros; cbn; auto.
-  rewrite IHe; repeat f_equal; apply functional_extensionality; intros [a|]; auto.
-  rewrite bind_map_law'.
-Qed. *)
-
 
 Definition var_subst' {V} e' (v:^V) :=
   match v with
@@ -221,8 +211,8 @@ Notation "E [ e ]" := (plug' E e)
 Definition tm_dec' (e : tm' ␀) : (val' ␀ + non' ␀) :=
   match e with
   | <| var a |> => from_void a
+  | <| S₀ |> => inl val_s_0'
   | <| λ  e' |> => inl (val_abs' e')
-  | <| S₀ e' |> => inr (non_s_0' e')
   | <| e1   e2 |> => inr (non_app' e1 e2)
   | <| e1 $ e2 |> => inr (non_dol' e1 e2)
   | <| let e1 in e2 |> => inr (non_let' e1 e2)
@@ -260,6 +250,8 @@ Ltac reason := repeat(
     let td := fresh "td" in
     let Hd := fresh "Hd" in
     remember (tm_dec' e) as td eqn: Hd; inv td; try rewrite Hd in *
+  | H : context C [match ?v with val_abs' _ => _ | val_s_0' => _ end] |- _ =>
+    destruct v; inversion H; clear H; subst
   end).
 
 
@@ -281,19 +273,19 @@ Section Contexts.
   .
 
   Inductive redex' :=
-  | redex_beta'      : val' A → val' A → redex'
-  | redex_dollar'    : val' A → val' A → redex'
-  | redex_shift'     : val' A → tm' ^A → redex'  (* v $ S₀ f. e *)
-  | redex_dol_let'   : val' A → tm' ^A → tm' ^A → redex' (* v $ let x = S₀ f. e1 in e2 *)
+  | redex_beta'      : tm' ^A → val' A → redex'  (* (λ e) v *)
+  | redex_dollar'    : val' A → val' A → redex'  (* v $ v' *)
+  | redex_shift'     : val' A → val' A → redex'  (* v $ S₀ v' *)
+  | redex_dol_let'   : val' A → val' A → tm' ^A → redex' (* v $ let x = S₀ v1 in e2 *)
   | redex_let'       : J'     → non' A → redex'  (* J[p] *)
   | redex_let_beta'  : val' A → tm' ^A → redex'  (* let x = v in e *)
-  | redex_let_assoc' : tm' ^A → tm' ^A → tm' ^A → redex' (* let x = (let y = S₀ f. e1 in e2) in e3 *)
+  | redex_let_assoc' : val' A → tm' ^A → tm' ^A → redex' (* let x = (let y = S₀ v1 in e2) in e3 *)
   .
 
   Inductive dec' :=
   | dec_value' : val' A → dec'
-  | dec_stuck_s_0' : tm' ^A → dec' (* S₀ f. e1 *)
-  | dec_stuck_let' : tm' ^A → tm' ^A → dec' (* let x = S₀ f. e1 in e2 *)
+  | dec_stuck_s_0' : val' A → dec' (* S₀ v *)
+  | dec_stuck_let' : val' A → tm' ^A → dec' (* let x = S₀ v in e *)
   | dec_redex' : K' → T' → redex' → dec' (* K[T[Redex]] *)
   .
 End Contexts.
@@ -327,35 +319,33 @@ Instance PlugT' : Plug' T' := @plugT'.
 
 Definition redex_to_term' {A} (r : redex' A) := 
   match r with
-  | redex_beta'   v1 v2 => <| v1 v2 |>
+  | redex_beta'   e v => <| (λ e) v |>
   | redex_dollar' v1 v2 => <| v1 $ v2 |>
-  | redex_shift'  v  e  => <| v $ S₀ e |>
-  | redex_dol_let' v e1 e2 => <| v $ let S₀ e1 in e2 |>
+  | redex_shift'  v  v' => <| v  $ S₀ v' |>
+  | redex_dol_let' v v1 e2 => <| v $ let S₀ v1 in e2 |>
   | redex_let' j p  => <| j[p] |>
   | redex_let_beta' v e => <| let v in e |>
-  | redex_let_assoc' e1 e2 e3 => <| let (let S₀ e1 in e2) in e3 |>
+  | redex_let_assoc' v1 e2 e3 => <| let (let S₀ v1 in e2) in e3 |>
   end.
 Coercion redex_to_term' : redex' >-> tm'.
-
-Definition stuck_to_non' : tm' ^␀ * option (tm' ^␀) → non' ␀ := λ s,
-  match s with
-  | (e, None) => non_s_0' e
-  | (e1, Some e2) => non_let' <| S₀ e1 |> e2
-  end.
 
 
 Fixpoint decompose' (e : tm' ␀) : dec' ␀ :=
   match e with
   | <| var a |> => from_void a
+  | <| S₀    |> => dec_value' val_s_0'
   | <| λ  e' |> => dec_value' (val_abs' e')
-  | <| S₀ e' |> => dec_stuck_s_0' e'
   | <| e1 e2 |> =>
     match tm_dec' e1 with
-    | inr p1 => dec_redex' K_nil' T_nil' (redex_let' (J_fun' e2) p1) (* p1 e2 *)
+    | inr p1 => dec_redex' K_nil' T_nil' (redex_let' (J_fun' e2) p1)   (* p1 e2 *)
     | inl v1 =>
       match tm_dec' e2 with
       | inr p2 => dec_redex' K_nil' T_nil' (redex_let' (J_arg' v1) p2) (* v1 p2 *)
-      | inl v2 => dec_redex' K_nil' T_nil' (redex_beta' v1 v2)         (* v1 v2 *)
+      | inl v2 =>
+        match v1 with
+        | val_abs' t => dec_redex' K_nil' T_nil' (redex_beta' t v2)    (* (λ t) v2 *)
+        | val_s_0' => dec_stuck_s_0' v2                                (* S₀ v2 *)
+        end
       end
     end
   | <| e1 $ e2 |> =>
@@ -363,16 +353,16 @@ Fixpoint decompose' (e : tm' ␀) : dec' ␀ :=
     | inr p1 => dec_redex' K_nil' T_nil' (redex_let' (J_dol' e2) p1) (* p1 $ e2 *)
     | inl v1 => (* v1 $ e *)
       match decompose' e2 with
-      | dec_stuck_s_0' e2'       => dec_redex' K_nil' (T_nil')         (redex_shift' v1 e2')         (* v1 $ S₀ f. e2' *)
-      | dec_stuck_let' e2_1 e2_2 => dec_redex' K_nil' (T_nil')         (redex_dol_let' v1 e2_1 e2_2) (* v1 $ let x = S₀ f. e2_1 in e2_2 *)
+      | dec_stuck_s_0' v2'       => dec_redex' K_nil' (T_nil')         (redex_shift' v1 v2')         (* v1 $ S₀ v2' *)
+      | dec_stuck_let' v2_1 e2_2 => dec_redex' K_nil' (T_nil')         (redex_dol_let' v1 v2_1 e2_2) (* v1 $ let x = S₀ v2_1 in e2_2 *)
       | dec_redex' k t r         => dec_redex' K_nil' (T_cons' v1 k t) (r)                           (* v1 $ K[T[r]] *)
       | dec_value' v2            => dec_redex' K_nil' (T_nil')         (redex_dollar' v1 v2)         (* v1 $ v2 *)
       end
     end
   | <| let e1 in e2 |> =>
     match decompose' e1 with
-    | dec_stuck_s_0' e1'       => dec_stuck_let' e1' e2                                           (* let x = S₀ f. e1' in e2 *)
-    | dec_stuck_let' e1_1 e1_2 => dec_redex' (K_nil')      T_nil' (redex_let_assoc' e1_1 e1_2 e2) (* let x = (let y = S₀ f. e1_1 in e1_2) in e2 *)
+    | dec_stuck_s_0' v1'       => dec_stuck_let' v1' e2                                           (* let x = S₀ v1' in e2 *)
+    | dec_stuck_let' v1_1 e1_2 => dec_redex' (K_nil')      T_nil' (redex_let_assoc' v1_1 e1_2 e2) (* let x = (let y = S₀ v1_1 in e1_2) in e2 *)
     | dec_redex' k t r         => dec_redex' (K_let' k e2) t      (r)                             (* let x = K[T[r]] in e2 *)
     | dec_value' v1            => dec_redex' (K_nil')      T_nil' (redex_let_beta' v1 e2)         (* let x = v1 in e2 *)
     end
@@ -416,26 +406,26 @@ Lemma decompose_value_inversion' : ∀ e v,
 Proof.
   intros. inv e; cbn in *.
   - destruct a.
+  - destruct v; inversion H; clear H; subst. auto.
   - inj H; auto.
-  - inversion H.
   - reason; inversion H.
   - reason; inv_decompose_match' H.
   - inv_decompose_match' H.
 Qed.
-Lemma decompose_stuck_s_0_inversion' : ∀ e e',
-  decompose' e = dec_stuck_s_0' e' → e = <| S₀ e' |>.
+Lemma decompose_stuck_s_0_inversion' : ∀ e v,
+  decompose' e = dec_stuck_s_0' v → e = <| S₀ v |>.
 Proof.
-  intros. inv e; cbn in *; reason;
+  intros. inv e; cbn in *; reason; auto;
   try solve [inversion a | inv H];
   inv_decompose_match' H.
 Qed.
-Lemma decompose_stuck_let_inversion' : ∀ e e' e'',
-  decompose' e = dec_stuck_let' e' e'' → e = <| let S₀ e' in e'' |>.
+Lemma decompose_stuck_let_inversion' : ∀ e v1 e2,
+  decompose' e = dec_stuck_let' v1 e2 → e = <| let S₀ v1 in e2 |>.
 Proof.
-  intros. inv e; cbn in *; reason;
+  intros. inv e; cbn in *; reason; auto;
   try solve [inversion a | inv H];
   inv_decompose_match' H.
-  rewrite (decompose_stuck_s_0_inversion' e1 e'); auto.
+  rewrite (decompose_stuck_s_0_inversion' e1 v1); auto.
 Qed.
 Ltac inv_dec' :=
   match goal with
@@ -446,7 +436,7 @@ Ltac inv_dec' :=
 Lemma decompose_redex_inversion' : ∀ e t k r,
   decompose' e = dec_redex' k t r → e = <| k[t[r]] |>.
 Proof.
-  dependent induction e; intros; cbn in *; reason;
+  dependent induction e; intros; cbn in *; reason; auto;
   try solve [destruct a | inv H];
   inv_decompose_match' H;
   repeat inv_dec'; cbn; f_equal;
@@ -459,15 +449,15 @@ Lemma decompose_plug_value' : ∀ v,
 Proof.
   intros; destruct v; auto.
 Qed.
-Lemma decompose_plug_stuck_s_0' : ∀ e, 
-  decompose' <| S₀ e |> = dec_stuck_s_0' e.
+Lemma decompose_plug_stuck_s_0' : ∀ (v : val' ␀), 
+  decompose' <| S₀ v |> = dec_stuck_s_0' v.
 Proof.
-  auto.
+  intros; destruct v; cbn; auto.
 Qed.
-Lemma decompose_plug_stuck_let' : ∀ e1 e2,
-  decompose' <| let S₀ e1 in e2 |> = dec_stuck_let' e1 e2.
+Lemma decompose_plug_stuck_let' : ∀ (v : val' ␀) e,
+  decompose' <| let S₀ v in e |> = dec_stuck_let' v e.
 Proof.
-  auto.
+  intros; destruct v; cbn; auto.
 Qed.
 Lemma decompose_plug_redex' : ∀ k t (r : redex' ␀),
   decompose' <| k[t[r]] |> = dec_redex' k t r.
@@ -478,7 +468,7 @@ Proof with cbn; auto.
       inv j; cbn; reason; reflexivity.
     + rewrite IHk; reflexivity.
   - induction k0...
-    + inv v... rewrite IHt...
+    + inv v; rewrite IHt...
     + rewrite IHk0. reflexivity.
 Qed.
 
@@ -488,12 +478,13 @@ Instance LiftTm' : Lift tm' := λ {A}, map' Some.
 Definition liftV' {A : Type} (v : val' A) : val' ^A :=
   match v with
   | val_abs' e => val_abs' (map' (option_map Some) e)
+  | val_s_0' => val_s_0'
   end.
 
 Lemma lift_val_to_tm' : ∀ {A} (v : val' A),
   ↑ (val_to_tm' v) = val_to_tm' (liftV' v).
 Proof.
-  intros. destruct v; cbn. reflexivity.
+  intros. destruct v; cbn; reflexivity.
 Qed.
 
 Definition liftJ' {A : Type} (j : J' A) : J' ^A := 
@@ -516,17 +507,16 @@ Instance LiftK' : Lift K' := @liftK'.
 Definition contract' (r : redex' ␀) : tm' ␀ :=
   match r with
   (* (λ x. e) v  ~>  e [x := v] *)
-  | redex_beta' (val_abs' e) v => <| e [0 := v] |>
+  | redex_beta' e v => <| e [0 := v] |>
 
   (* v1 $ v2  ~>  v1 v2 *)
   | redex_dollar' v1 v2 => <| v1 v2 |>
 
-  (* v $ S₀ f. e  ~>  e [f := λ x. v $ x] *)
-  | redex_shift' v e  => <| e [0 := v] |>
-  (* | redex_shift' v e  => <| e [0 := λv' {liftV' v} $ 0] |> *)
+  (* v $ S₀ w  ~>  w v *)
+  | redex_shift' v w  => <| w v |>
 
-  (* v $ let x = S₀ f. e1 in e2  ~>  (λ x. v $ e2) $ S₀ f. e1 *)
-  | redex_dol_let' v e1 e2 => <| (λ {liftV' v} $ e2) $ S₀ e1 |>
+  (* v $ let x = S₀ w in e  ~>  (λ x. v $ e) $ S₀ w *)
+  | redex_dol_let' v w e => <| (λ {liftV' v} $ e) $ S₀ w |>
 
   (* J[p]  ~>  let x = p in J[x] *)
   | redex_let' j p => <| let p in ↑j[0] |>
@@ -534,8 +524,8 @@ Definition contract' (r : redex' ␀) : tm' ␀ :=
   (* let x = v in e  ~>  e [x := v] *)
   | redex_let_beta' v e => <| e [0 := v] |>
 
-  (* let x = (let y = S₀ f. e1 in e2) in e3  ~>  let y = S₀ f. e1 in let x = e2 in e3*)
-  | redex_let_assoc' e1 e2 e3 => <| let S₀ e1 in let e2 in {map' (option_map Some) e3} |>
+  (* let x = (let y = S₀ v1 in e2) in e3  ~>  let y = S₀ v1 in let x = e2 in e3 *)
+  | redex_let_assoc' v1 e2 e3 => <| let S₀ v1 in let e2 in {map' (option_map Some) e3} |>
   end.
 
 Definition optional_step' e :=
@@ -579,13 +569,13 @@ Lemma multi_contr_multi' : ∀ {e1 e2 e3},
 Proof.
   intros. eapply multi_step; try eapply (step_tm' K_nil' T_nil'); cbn; eassumption.
 Qed.
-Definition contr_beta' : ∀ e (v : val' ␀), <| (λ e) v |> ~>' <| e [ 0 := v ] |> := λ e v, contr_tm' (redex_beta' (val_abs' e) v).
+Definition contr_beta' : ∀ e (v : val' ␀), <| (λ e) v |> ~>' <| e [ 0 := v ] |> := λ e v, contr_tm' (redex_beta' e v).
 Definition contr_dollar' : ∀ (v1 v2 : val' ␀), <| v1 $ v2 |> ~>' <| v1 v2 |> := λ v1 v2, contr_tm' (redex_dollar' v1 v2).
-Definition contr_shift' : ∀ (v : val' ␀) e, <| v $ S₀ e |> ~>' <| e [ 0 := v ] |> := λ v e, contr_tm' (redex_shift' v e).
-Definition contr_dol_let' : ∀ (v : val' ␀) e1 e2, <| v $ let S₀ e1 in e2 |> ~>' <| (λ {liftV' v} $ e2) $ S₀ e1 |> := λ v e1 e2, contr_tm' (redex_dol_let' v e1 e2).
+Definition contr_shift' : ∀ (v w : val' ␀), <| v $ S₀ w |> ~>' <| w v |> := λ v w, contr_tm' (redex_shift' v w).
+Definition contr_dol_let' : ∀ (v v1 : val' ␀) e2, <| v $ let S₀ v1 in e2 |> ~>' <| (λ {liftV' v} $ e2) $ S₀ v1 |> := λ v v1 e2, contr_tm' (redex_dol_let' v v1 e2).
 Definition contr_let' : ∀ (j : J' ␀) (p : non' ␀), <| j[p] |> ~>' <| let p in ↑j[0] |> := λ j p, contr_tm' (redex_let' j p).
 Definition contr_let_beta' : ∀ (v : val' ␀) e, <| let v in e |> ~>' <| e [ 0 := v ] |> := λ v e, contr_tm' (redex_let_beta' v e).
-Definition contr_let_assoc' : ∀ e1 e2 e3, <| let (let S₀ e1 in e2) in e3 |> ~>' <| let S₀ e1 in let e2 in {map' (option_map Some) e3} |> := λ e1 e2 e3, contr_tm' (redex_let_assoc' e1 e2 e3).
+Definition contr_let_assoc' : ∀ (v1 : val' ␀) e2 e3, <| let (let S₀ v1 in e2) in e3 |> ~>' <| let S₀ v1 in let e2 in {map' (option_map Some) e3} |> := λ v1 e2 e3, contr_tm' (redex_let_assoc' v1 e2 e3).
 Global Hint Resolve step_contr' contr_beta' contr_dollar' contr_shift' contr_dol_let' contr_let' contr_let_beta' contr_let_assoc' : core.
 
 Fixpoint eval' i e :=
@@ -602,25 +592,25 @@ Section Examples.
   Definition _id : tm' ␀ := <| λ 0 |>.
   Definition _const : tm' ␀ := <| λ λ 1 |>.
 
-  Compute (eval' 10 <| _id $ _const $ S₀ 0 |>).
-  Compute (eval' 10 <| _const $ _id $ S₀ 0 |>).
+  Compute (eval' 10 <| _id $ _const $ S₀, 0 |>).
+  Compute (eval' 10 <| _const $ _id $ S₀, 0 |>).
 
   Definition j1 : J' ␀ := J_fun' <| λ 0 0 |>.
   Definition j2 : J' ␀ := J_arg' <| λv' 0 |>.
   Definition j3 : J' ␀ := J_dol' <| λ 0 |>.
-  Definition ej123 := <| j1[j2[j3[S₀ 0]]] |>.
+  Definition ej123 := <| j1[j2[j3[S₀, 0]]] |>.
 
   Example from_K_to_K' : eval' 3 ej123 = <| 
     let
       let
-        let S₀ 0
+        let S₀, 0
         in ↑j3[0]
       in ↑j2[0]
     in ↑j1[0]
   |>. Proof. auto. Qed.
 
   Example from_K_to_stuck' : eval' 5 ej123 = <| 
-    let S₀ 0 in
+    let S₀, 0 in
     let
         let ↑j3[0]
         in ↑↑j2[0]
@@ -633,14 +623,14 @@ Section Examples.
         let ↑j3[0]
         in ↑↑j2[0]
       in ↑↑j1[0]
-    ) $ S₀ 0
+    ) $ S₀, 0
   |>. Proof. cbn. auto. Qed.
 
-  Example ex_shift : eval' 7 <| _id $ ej123 |> = <|
+  Example ex_shift : eval' 8 <| _id $ ej123 |> = <|
     λ ↑_id $ let (let ↑j3[0] in ↑↑j2[0]) in ↑↑j1[0]
   |>. Proof. cbn. auto. Qed.
 
-  Compute (decompose' (eval' 7 <| _id $ ej123 |>)).
+  Compute (decompose' (eval' 8 <| _id $ ej123 |>)).
   
 End Examples.
 
@@ -828,9 +818,9 @@ Qed.
 
 
 Theorem plug_k_let_bubbles_up_s_0 : ∀ (k : K' ␀) e1 e2,
-  <| k [let S₀ e1 in e2] |> -->'* <| let S₀ e1 in ↑k[e2] |>.
+  <| k [let S₀, e1 in e2] |> -->'* <| let S₀, e1 in ↑k[e2] |>.
 Proof.
   induction k; intros; cbn; auto.
   eapply multi_trans. eapply multi_let'. apply IHk.
-  apply multi_contr'. apply contr_let_assoc'.
+  rewrite lambda_to_val'. apply multi_contr'. apply contr_let_assoc'.
 Qed.
