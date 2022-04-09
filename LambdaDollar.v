@@ -22,7 +22,7 @@ Definition val_to_tm {A} (v : val A) :=
   end.
 Coercion val_to_tm : val >-> tm.
 
-Lemma val_to_tm_injection : ∀ {A} (v1 v2 : val A),
+Lemma inj_val : ∀ {A} (v1 v2 : val A),
   val_to_tm v1 = val_to_tm v2 → 
   v1 = v2.
 Proof.

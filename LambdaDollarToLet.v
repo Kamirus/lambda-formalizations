@@ -61,6 +61,21 @@ Global Hint Constructors sim_val : core.
 Global Hint Constructors sim_non : core.
 Global Hint Constructors sim_tm : core.
 
+Fixpoint dollar_to_let {A} (e : tm A) : tm' A :=
+  match e with
+  | <{ var a }> => <| var a |>
+  | <{ λ  e' }> => <| λ   {dollar_to_let e'} |>
+  | <{ S₀ e' }> => <| S₀, {dollar_to_let e'} |>
+  | <{ e1   e2 }> => <| {dollar_to_let e1}   {dollar_to_let e2} |>
+  | <{ e1 $ e2 }> => <| {dollar_to_let e1} $ {dollar_to_let e2} |>
+  end.
+
+Lemma sim_dollar_to_let : ∀ {A} (e : tm A),
+  e ~ₑ dollar_to_let e.
+Proof.
+  induction e; cbn; auto.
+Qed.
+
 Lemma sim_tm_from_sim_val : ∀ {A v} {v' : val' A},
   v ~ᵥ v' →
   v ~ₑ v'.
@@ -97,8 +112,8 @@ Ltac reason := repeat(
       let Hev := fresh "Hev" in
       let Hv := fresh "Hv" in
       apply sim_val_inv in H as [v' [Hev Hv]]; subst
-  | H : val_to_tm' ?v1 = val_to_tm' ?v2 |- _ => apply val_to_tm_injection' in H
-  | H : val_to_tm  ?v1 = val_to_tm  ?v2 |- _ => apply val_to_tm_injection  in H
+  | H : val_to_tm' ?v1 = val_to_tm' ?v2 |- _ => apply inj_val' in H
+  | H : val_to_tm  ?v1 = val_to_tm  ?v2 |- _ => apply inj_val  in H
   end).
 
 
