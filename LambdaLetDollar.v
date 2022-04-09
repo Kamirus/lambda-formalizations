@@ -26,7 +26,7 @@ Definition val_to_tm' {A} (v : val' A) :=
   end.
 Coercion val_to_tm' : val' >-> tm'.
 
-Lemma val_to_tm_injection' : ∀ {A} (v1 v2 : val' A),
+Lemma inj_val' : ∀ {A} (v1 v2 : val' A),
   val_to_tm' v1 = val_to_tm' v2 → 
   v1 = v2.
 Proof.
@@ -39,7 +39,6 @@ Inductive non' {A} :=
 | non_dol' : tm' A → tm'  A → non' (* e $ e *)
 | non_let' : tm' A → tm' ^A → non' (* let x = e1 in e2 *)
 .
-
 Arguments non' A : clear implicits.
 Global Hint Constructors non' : core.
 
@@ -50,6 +49,12 @@ Definition non_to_tm' {A} (p : non' A) :=
   | non_let' e1 e2 => tm_let' e1 e2
   end.
 Coercion non_to_tm' : non' >-> tm'.
+
+Lemma inj_non' : ∀ {A} (p p' : non' A),
+  non_to_tm' p = non_to_tm' p' → p = p'.
+Proof.
+  intros; destruct p, p'; cbn in *; inv H; auto.
+Qed.
 
 Declare Custom Entry λ_let_dollar_scope.
 Notation "<| e |>" := e (at level 1, e custom λ_let_dollar_scope at level 99).
@@ -240,6 +245,8 @@ Ltac reason := repeat(
   match goal with
   | H : ␀ |- _ => destruct H
   | H : (_, _) = (_, _) |- _ => inj H
+  | H : val_to_tm' _ = val_to_tm' _ |- _ => apply inj_val' in H; rewrite H in *
+  | H : non_to_tm' _ = non_to_tm' _ |- _ => apply inj_non' in H; rewrite H in *
   | H : inl ?v = tm_dec' ?e |- _ => rewrite (tm_dec_val' e v (eq_sym H)) in *; auto
   | H : inr ?p = tm_dec' ?e |- _ => rewrite (tm_dec_non' e p (eq_sym H)) in *; auto
   | H : context C [let (_, _) := ?e in _] |- _ =>
@@ -379,10 +386,26 @@ Ltac inv_decompose_match' H :=
   end.
 
 
-Lemma inj_non' : ∀ {A} (p p' : non' A),
-  non_to_tm' p = non_to_tm' p' → p = p'.
+Lemma inj_plug_j' : ∀ {A} (j1 j2 : J' A) (p1 p2 : non' A),
+  <| j1[p1] |> = <| j2[p2] |> →
+  j1 = j2 /\ p1 = p2.
 Proof.
-  intros; destruct p, p'; cbn in *; inv H; auto.
+  intros;
+  destruct j1, j2; cbn in *; inversion H; clear H; reason; subst; auto;
+  solve [destruct p1 + destruct p2; destruct v; inversion H1; auto].
+Qed.
+
+Lemma inj_redex' : ∀ {A} (r r' : redex' A),
+  redex_to_term' r = redex_to_term' r' → r = r'.
+Proof.
+  intros; destruct r, r'; cbn in *; inversion H; clear H; reason; subst; auto;
+  try apply inj_val' in H1; try apply inj_val' in H2; subst; auto;
+  try solve [destruct j; cbn in *; inversion H1; auto];
+  try solve [destruct j; destruct v; destruct n; cbn in *; inversion H1; auto];
+  try solve [destruct v0 + destruct v2; inversion H2].
+  apply inj_plug_j' in H1 as [H1 H2]; subst; auto.
+  destruct v; inversion H1.
+  destruct v0; inversion H1.
 Qed.
 
 (* Lemma inj_redex : ∀ {A} (r r' : redex' A),
@@ -577,6 +600,42 @@ Definition contr_let' : ∀ (j : J' ␀) (p : non' ␀), <| j[p] |> ~>' <| let p
 Definition contr_let_beta' : ∀ (v : val' ␀) e, <| let v in e |> ~>' <| e [ 0 := v ] |> := λ v e, contr_tm' (redex_let_beta' v e).
 Definition contr_let_assoc' : ∀ (v1 : val' ␀) e2 e3, <| let (let S₀ v1 in e2) in e3 |> ~>' <| let S₀ v1 in let e2 in {map' (option_map Some) e3} |> := λ v1 e2 e3, contr_tm' (redex_let_assoc' v1 e2 e3).
 Global Hint Resolve step_contr' contr_beta' contr_dollar' contr_shift' contr_dol_let' contr_let' contr_let_beta' contr_let_assoc' : core.
+
+Lemma deterministic_contr' : ∀ e e1 e2,
+  e ~>' e1 →
+  e ~>' e2 →
+  e1 = e2.
+Proof.
+  intros e e1 e2 H1 H2.
+  inversion H1; clear H1; subst. 
+  inversion H2; clear H2; subst.
+  apply inj_redex' in H0; subst; reflexivity.
+Qed.
+
+Lemma redex_when_contr' : ∀ e1 e2,
+  e1 ~>' e2 →
+  ∃ r1, e1 = redex_to_term' r1.
+Proof.
+  intros. inversion H; clear H; subst.
+  exists r; auto.
+Qed.
+
+Lemma deterministic_step' : ∀ e e1 e2,
+  e -->' e1 →
+  e -->' e2 →
+  e1 = e2.
+Proof.
+  intros e e1 e2 H1 H2.
+  inversion H1; clear H1; subst. 
+  inversion H2; clear H2; subst.
+  apply redex_when_contr' in H as HH; destruct HH as [r0 HH]; subst.
+  apply redex_when_contr' in H1 as HH; destruct HH as [r1 HH]; subst.
+  assert (dec_redex' k0 t0 r1 = dec_redex' k t r0) as Hktr.
+  { repeat rewrite <- decompose_plug_redex'. f_equal; assumption. }
+  inversion Hktr; clear Hktr; subst.
+  repeat f_equal.
+  apply (deterministic_contr' r0); assumption.
+Qed.
 
 Fixpoint eval' i e :=
   match i with
