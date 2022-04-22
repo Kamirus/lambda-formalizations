@@ -551,7 +551,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma multi_j : ∀ {j : J ␀} {e1 e2},
+Lemma multi_j : ∀ {e1 e2} (j : J ␀),
   e1 -->* e2 →
   <{ j[e1] }> -->* <{ j[e2] }>.
 Proof.
