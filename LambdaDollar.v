@@ -664,3 +664,8 @@ Proof.
   intros. change (bind (var_subst v) (↑e)) with <{ (↑e) [0 := v] }>.
   apply subst_lift.
 Qed.
+
+Lemma lift_rewrite_plug_k_j : ∀ {A} (k : K A) (j : J A) (kj : K A),
+  (∀ e, <{  k [ j [e]] }> = <{  kj [e] }>) →
+  (∀ e, <{ ↑k [↑j [e]] }> = <{ ↑kj [e] }>).
+Admitted.

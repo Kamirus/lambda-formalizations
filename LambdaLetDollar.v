@@ -875,6 +875,14 @@ Proof.
   apply subst_lift'.
 Qed.
 
+Lemma subst_plug_of_lift_j : ∀ {A} (j : J' A) (v : val' A),
+  <| (↑j[0])[0 := v] |> = <| j[v] |>.
+Proof.
+  intros. destruct j; cbn; auto; 
+  try rewrite <- lift_val_to_tm';
+  rewrite bind_var_subst_lift'; reflexivity.
+Qed.
+
 
 Theorem plug_k_let_bubbles_up_s_0 : ∀ (k : K' ␀) e1 e2,
   <| k [let S₀, e1 in e2] |> -->'* <| let S₀, e1 in ↑k[e2] |>.
@@ -882,4 +890,89 @@ Proof.
   induction k; intros; cbn; auto.
   eapply multi_trans. eapply multi_let'. apply IHk.
   rewrite lambda_to_val'. apply multi_contr'. apply contr_let_assoc'.
+Qed.
+
+Theorem plug_k_let_bubbles_up_s_0' : ∀ (k : K' ␀) (v : val' ␀) e,
+  <| k [let S₀ v in e] |> -->'* <| let S₀ v in ↑k[e] |>.
+Proof.
+  induction k; intros; cbn; auto.
+  eapply multi_trans. eapply multi_let'. apply IHk.
+  apply multi_contr'. apply contr_let_assoc'.
+Qed.
+
+
+Lemma plug_k_let_let_S0_step_inv : ∀ (k : K' ␀) (v : val' ␀) e1 e2 term,
+  <| k [let let S₀ v in e1 in e2] |> -->' term →
+  term = <| k [let S₀ v in let e1 in {map' (option_map Some) e2}] |>.
+Proof.
+  intros.
+  eapply deterministic_step' in H.
+  2: { eapply step_k'. apply step_contr'. apply contr_let_assoc'. }
+  subst. reflexivity.
+Qed.
+
+Lemma let_S0_does_not_step : ∀ (v : val' ␀) e term,
+  <| let S₀ v in e |> -->' term → False.
+Admitted.
+
+Lemma plug_step_inv : ∀ (k : K' ␀) (t : T' ␀) (r : redex' ␀) term,
+  <| k [t [r]] |> -->' term →
+  term = <| k [t [{contract' r}]] |>.
+Proof.
+  intros. inversion H; clear H; subst.
+  inversion H1; clear H1; subst. 
+  assert (decompose' <| k0 [t0 [r0]] |> = decompose' <| k [t [r]] |>) by (rewrite H0; auto).
+  repeat rewrite decompose_plug_redex' in *. inversion H; clear H; subst. reflexivity.
+Qed.
+
+Lemma inner_step_inv' : ∀ (k : K' ␀) (t : T' ␀) e term inner,
+  <| k [t [e]] |> -->' term →
+  e -->' inner →
+  term = <| k [t [inner]] |>.
+Proof.
+  intros. eapply step_t' in H0. eapply step_k' in H0.
+  eapply deterministic_step'; eauto.
+Qed.
+
+Lemma fold_redex_dol_let' : ∀ (w v : val' ␀) e,
+  <| w $ let S₀ v in e |> = redex_dol_let' w v e.
+Proof.
+  reflexivity.
+Qed.
+
+
+Lemma plug_shift_step_inv' : ∀ (k0 : K' ␀) (t0 : T' ␀) (w : val' ␀) (k : K' ␀) (v : val' ␀) e term,
+  <| k0 [t0 [w $ k [let S₀ v in e]]] |> -->' term → ∃ inner,
+  term = <| k0 [t0 [inner]] |> /\
+  <| w $ k [let S₀ v in e] |> -->' inner.
+Proof.
+  intros.
+  remember (plug_k_let_bubbles_up_s_0' k v e) as Hinner eqn:HH. clear HH.
+  apply (@multi_delim' w) in Hinner.
+  inversion Hinner; clear Hinner; subst. 
+  - rewrite H2 in *.
+    rewrite fold_redex_dol_let' in *.
+    eapply (plug_step_inv k0 t0 _ term) in H. subst. eauto.
+  - eapply step_t' in H0 as HH. eapply step_k' in HH.
+    repeat eexists.
+    + apply (deterministic_step' _ _ _ H HH).
+    + assumption. 
+Qed.
+
+Lemma shift_step_inv' : ∀ (w : val' ␀) (k : K' ␀) (v : val' ␀) e term,
+  <| w $ k [let S₀ v in e] |> -->' term → 
+  (k = K_nil' /\ term = contract' (redex_dol_let' w v e)) \/
+  (∃ inner, <| k [let S₀ v in e] |> -->' inner /\ term = <| w $ inner |>).
+Proof.
+  intros.
+  remember (plug_k_let_bubbles_up_s_0' k v e) as Hinner eqn:HH. clear HH.
+  inversion Hinner; clear Hinner; subst.
+  - left. rewrite H2 in *.
+    destruct k.
+    split; auto. cbn in *.
+    eapply (deterministic_step' _ _ _ H). auto.
+    cbn in H2. inversion H2. destruct k; inversion H1.
+  - right.
+    apply (inner_step_inv' K_nil' (T_cons' w K_nil' T_nil') _ _ _ H) in H0 as HH.
+    repeat eexists; eauto.
 Qed.
