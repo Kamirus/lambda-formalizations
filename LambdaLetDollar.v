@@ -99,12 +99,24 @@ Fixpoint map' {A B : Type} (f : A -> B) (e : tm' A) : tm' B :=
   | <| let e1 in e2 |> => tm_let' (map' f e1) (map' (option_map f) e2)
   end.
 
+Definition mapV' {A B} (f : A → B) (v : val' A) : val' B :=
+  match v with
+  | val_abs' e => val_abs' (map' (option_map f) e)
+  | val_s_0' => val_s_0'
+  end.
+
 Lemma map_val_is_val' : ∀ {A B} (v : val' A) (f : A → B),
   ∃ w, map' f (val_to_tm' v) = val_to_tm' w.
 Proof.
   intros. destruct v; cbn.
   - eexists <| λv' _ |>. reflexivity.
   - exists val_s_0'; reflexivity.
+Qed.
+
+Lemma mapV_is_map' : ∀ {A B} v (f : A → B),
+  val_to_tm' (mapV' f v) = map' f (val_to_tm' v).
+Proof.
+  intros. destruct v; auto.
 Qed.
 
 Lemma map_map_law' : forall A e B C (f:A->B) (g:B->C),
@@ -118,6 +130,13 @@ Proof.
   rewrite option_map_comp_law; auto.
 Qed.
 
+Lemma mapV_mapV_law' : forall A v B C (f : A → B) (g : B → C),
+  mapV' g (mapV' f v) = mapV' (g ∘ f) v.
+Proof.
+  destruct v; intros; cbn; auto.
+  rewrite map_map_law'.
+  rewrite option_map_comp_law. reflexivity.
+Qed.
 
 Fixpoint bind' {A B : Type} (f : A -> tm' B) (e : tm' A) : tm' B :=
   match e with
@@ -498,11 +517,7 @@ Qed.
 
 Instance LiftTm' : Lift tm' := λ {A}, map' Some.
 
-Definition liftV' {A : Type} (v : val' A) : val' ^A :=
-  match v with
-  | val_abs' e => val_abs' (map' (option_map Some) e)
-  | val_s_0' => val_s_0'
-  end.
+Definition liftV' {A : Type} (v : val' A) : val' ^A := mapV' Some v.
 
 Lemma lift_val_to_tm' : ∀ {A} (v : val' A),
   ↑ (val_to_tm' v) = val_to_tm' (liftV' v).
@@ -510,20 +525,41 @@ Proof.
   intros. destruct v; cbn; reflexivity.
 Qed.
 
-Definition liftJ' {A : Type} (j : J' A) : J' ^A := 
+Definition mapJ' {A B} (f : A → B) (j : J' A) : J' B := 
   match j with
-  | J_fun' e => J_fun' (↑e)
-  | J_arg' v => J_arg' (liftV' v)
-  | J_dol' e => J_dol' (↑e)
+  | J_fun' e => J_fun' (map' f e)
+  | J_arg' v => J_arg' (mapV' f v)
+  | J_dol' e => J_dol' (map' f e)
   end.
-Instance LiftJ' : Lift J' := @liftJ'.
 
-Fixpoint liftK' {A : Type} (k : K' A) : K' ^A :=
+Lemma mapJ_mapJ_law' : forall A j B C (f : A → B) (g : B → C),
+  mapJ' g (mapJ' f j) = mapJ' (g ∘ f) j.
+Proof.
+  destruct j; intros; cbn;
+  try rewrite map_map_law';
+  try rewrite mapV_mapV_law';
+  auto.
+Qed.
+
+Fixpoint mapK' {A B} (f : A → B) (k : K' A) : K' B := 
   match k with
   | K_nil' => K_nil'
-  | K_let' k1 e2 => K_let' (liftK' k1) (map' (option_map Some) e2)
+  | K_let' k1 e2 => K_let' (mapK' f k1) (map' (option_map f) e2)
   end.
-Instance LiftK' : Lift K' := @liftK'.
+
+Lemma mapK_mapK_law' : forall A k B C (f : A → B) (g : B → C),
+  mapK' g (mapK' f k) = mapK' (g ∘ f) k.
+Proof.
+  induction k; intros; cbn; auto.
+  rewrite IHk.
+  rewrite map_map_law'.
+  rewrite option_map_comp_law.
+  reflexivity.
+Qed.
+
+Instance LiftJ' : Lift J' := λ {A}, mapJ' Some.
+
+Instance LiftK' : Lift K' := λ {A}, mapK' Some.
 
 (* Notation "↑ e" := (lift' e) (at level 15). *)
 
@@ -853,10 +889,41 @@ Proof.
   rewrite map_bind_law'. reflexivity.
 Qed.
 
+Lemma map_plug_j_is_plug_of_maps' : ∀ {A B} j e (f : A → B),
+  map' f <| j[e] |> = <| {mapJ' f j} [{map' f e}] |>.
+Proof.
+  intros. destruct j; cbn; try destruct v; auto.
+Qed.
+
+Lemma map_plug_k_is_plug_of_maps' : ∀ {A B} (k : K' A) e (f : A → B),
+  map' f <| k[e] |> = <| {mapK' f k} [{map' f e}] |>.
+Proof.
+  intros A B. generalize dependent B.
+  induction k; intros; cbn; auto.
+  rewrite IHk. reflexivity.
+Qed.
+
 Lemma lift_tm_abs' : ∀ {A} (e : tm' ^A),
   <| λ {map' (option_map Some) e} |> = ↑<| λ e |>.
 Proof.
   reflexivity.
+Qed.
+
+Lemma lift_mapJ' : ∀ {A B} j (f : A → B),
+  ↑(mapJ' f j) = mapJ' (option_map f) (↑j).
+Proof.
+  intros. destruct j; cbn;
+  repeat rewrite map_map_law';
+  repeat rewrite mapV_mapV_law';
+  f_equal.
+Qed.
+
+Lemma lift_mapK' : ∀ {A B} k (f : A → B),
+  ↑(mapK' f k) = mapK' (option_map f) (↑k).
+Proof.
+  intros. unfold lift. unfold LiftK'.
+  repeat rewrite mapK_mapK_law'.
+  f_equal.
 Qed.
 
 Lemma subst_lift' : ∀ {A} (e : tm' A) v,
@@ -879,6 +946,8 @@ Lemma bind_var_subst_lift_j' : ∀ {A} (j : J' A) e v,
   bind' (var_subst' (val_to_tm' v)) <| ↑j[e] |> = <| j [{bind' (var_subst' (val_to_tm' v)) e}] |>.
 Proof.
   intros; destruct j; cbn; auto;
+  try change (map' Some t) with (↑t);
+  try change (mapV' Some v0) with (liftV' v0);
   try rewrite <- lift_val_to_tm';
   try rewrite bind_var_subst_lift'; reflexivity.
 Qed.
@@ -899,7 +968,9 @@ Qed.
 Lemma subst_plug_of_lift_j : ∀ {A} (j : J' A) (v : val' A),
   <| (↑j[0])[0 := v] |> = <| j[v] |>.
 Proof.
-  intros. destruct j; cbn; auto; 
+  intros. destruct j; cbn; auto;
+  try change (mapV' Some v0) with (liftV' v0);
+  try change (map' Some t) with (↑t);
   try rewrite <- lift_val_to_tm';
   rewrite bind_var_subst_lift'; reflexivity.
 Qed.
@@ -932,9 +1003,36 @@ Proof.
   subst. reflexivity.
 Qed.
 
+Lemma S0_val_does_not_step : ∀ (v : val' ␀) term,
+  <| S₀ v |> -->' term → False.
+Proof.
+  intros.
+  inversion H; clear H; subst. 
+  destruct k; cbn in *.
+  - destruct t; cbn in *. subst.
+    + inversion H1; clear H1; subst. 
+      destruct r; inversion H0; clear H0; subst. 
+      destruct j; inversion H1; clear H1; subst.
+      * destruct n; inversion H0.
+      * destruct n; destruct v; inversion H2.
+    + inversion H0.
+  - inversion H0. 
+Qed.
+
 Lemma let_S0_does_not_step : ∀ (v : val' ␀) e term,
   <| let S₀ v in e |> -->' term → False.
-Admitted.
+Proof.
+  intros. inversion H; clear H; subst.
+  destruct k; cbn in *.
+  - destruct t; cbn in *; subst.
+    + inversion H1; clear H1; subst. 
+      destruct r; inversion H0; clear H0; subst. 
+      * destruct j; inversion H1.
+      * destruct v0; inversion H1.
+    + inversion H0.
+  - inversion H0; clear H0; subst.
+    eapply S0_val_does_not_step. rewrite <- H2. constructor; eassumption.
+Qed.
 
 Lemma plug_step_inv : ∀ (k : K' ␀) (t : T' ␀) (r : redex' ␀) term,
   <| k [t [r]] |> -->' term →

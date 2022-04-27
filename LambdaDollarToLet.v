@@ -399,6 +399,8 @@ Lemma sim_lift_j : ∀ {A} {j : J A} {j'},
   ↑j ~ⱼ ↑j'.
 Proof.
   intros. inversion H; clear H; subst; cbn; auto.
+  reason; subst.
+  apply sim_lift_val in Hv. auto.
 Qed.
 Global Hint Resolve sim_lift_j : core.
 
@@ -410,11 +412,15 @@ Proof with auto.
 
   assert (map' (option_map Some) <| ↑j'[0] |> = <| ↑↑j'[0] |>) as HH.
     inversion H; clear H; subst; cbn;
+    try change (map' Some e') with (↑e');
+    try change (mapV' Some v') with (liftV' v');
+    repeat rewrite mapV_is_map';
     repeat rewrite <- lift_val_to_tm';
     unfold lift; unfold LiftTm';
     repeat rewrite map_map_law'...
   rewrite HH.
   constructor...
+  apply sim_lift_j...
 Qed.
 Global Hint Resolve sim_lift_k : core.
 

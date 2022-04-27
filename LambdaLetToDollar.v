@@ -155,34 +155,31 @@ Qed.
 Lemma sim_tm_from_sim_val : ∀ {A v'} {v : val A},
   v' ~ᵥ v →
   v' ~ₑ v.
-Admitted.
-(* Proof.
+Proof.
   intros. destruct v, v'; inversion H; clear H; subst; assumption.
-Qed. *)
+Qed.
 Global Hint Resolve sim_tm_from_sim_val : core.
 
 Lemma sim_val_inv : ∀ {A} (v' : val' A) (e : tm A),
   v' ~ₑ e → ∃ (v : val A), e = v /\ v' ~ᵥ v.
-Admitted.
-(* Proof.
-  intros. destruct v. inversion H; clear H; subst.
-  exists (val_abs' e'0); split; auto. repeat constructor; auto.
-  repeat eexists. repeat constructor; auto.
-Qed. *)
-
-Lemma sim_non_inv : ∀ {A} (p' : non' A) (e : tm A),
-  p' ~ₑ e → ∃ (p : non A), e = p /\ p' ~ₚ p.
-Admitted.
-(* Proof with split; cbn; auto; repeat constructor; assumption.
-  intros. destruct p; inversion H; clear H; subst.
-  exists (non_app' <| S₀ |> <| λ e'0 |>)...
-  exists (non_app' e1' e2')...
-  exists (non_let' e1' <| 0 ↑e2' |>)...
-  exists (non_let' e2' <| {liftV' v1'} 0|>)...
-  exists (non_dol' e1' e2')...
-  exists (non_app' v1' v2')...
-  exists (non_let' e1' <| 0 $ ↑e2' |>)...
-Qed. *)
+Proof with auto.
+  intros. destruct v'. inversion H; clear H; subst.
+  - exists <{ λv e0 }>; repeat split. constructor...
+  - repeat eexists.
+    rewrite lambda_to_val; f_equal.
+    apply sim_eta. rewrite H0 in *. assumption.
+  - repeat eexists.
+    rewrite lambda_to_val; f_equal.
+    apply sim_beta...
+  - inversion H; clear H; subst.
+    + exists <{ λv S₀ 1 0 }>; split.
+      reflexivity.
+      repeat constructor.
+    + rewrite H0 in *.
+      repeat eexists.
+      rewrite lambda_to_val; f_equal.
+      constructor. cbn. assumption.
+Qed.
 
 Ltac reason := repeat(
   match goal with
@@ -195,30 +192,26 @@ Ltac reason := repeat(
   | H : val_to_tm  ?v1 = val_to_tm  ?v2 |- _ => apply inj_val  in H
   end).
 
+Lemma sim_non_inv : ∀ {A} (p' : non' A) (e : tm A),
+  p' ~ₑ e → ∃ (p : non A), e = p /\ p' ~ₚ p.
+Proof with try split; cbn; auto; repeat constructor; try assumption.
+  intros. destruct p'; inversion H; clear H; subst;
+  try solve [destruct v'; inversion H0].
+  eexists (non_app _ _)...
+  eexists (non_dol _ _)...
+  eexists (non_app _ _)...
+  inversion H2; clear H2; subst; cbn.
+  eexists (non_app _ _)... apply (sim_let_new (J_fun' _) (J_fun _))...
+  eexists (non_app _ _)... apply (sim_let_new (J_arg' _) (J_arg _))...
+  eexists (non_dol _ _)... apply (sim_let_new (J_dol' _) (J_dol _))...
+Qed.
+
 Lemma sim_app_inv : ∀ {A} e1' e2' (term : tm A),
   <| e1' e2' |> ~ₑ term → ∃ e1 e2, e1' ~ₑ e1 /\ e2' ~ₑ e2 /\ term = <{ e1 e2 }>.
 Proof.
   intros. inversion H; clear H; subst; eauto.
   destruct v'; inversion H0.
 Qed.
-
-(* Lemma sim_dol_vals_inv : ∀ {A} (v1' v2' : val' A) (term : tm A),
-  <| v1' $ v2' |> ~ₑ term → ∃ (v1 v2 : val A), v1' ~ₑ v1 /\ v2' ~ₑ v2 /\ term = <{ v1 $ v2 }>.
-Proof.
-  intros. inversion H; clear H; subst.
-  - reason. repeat eexists; eauto. 
-  - destruct v'; inversion H0.
-  - destruct v2'; inversion H1.
-Qed.
-
-Lemma sim_dol_val_let_inv : ∀ {A} (v' : val' A) e1' e2' (term : tm A),
-  <| v' $ let e1' in e2' |> ~ₑ term →
-  ∃ (v : val A) e, v' ~ₑ v /\ <| let e1' in e2' |> ~ₑ e /\ term = <{ v $ e }>.
-Proof.
-  intros. inversion H; clear H; subst.
-  - reason. repeat eexists; eauto. 
-  - destruct v'0; inversion H0.
-Qed. *)
 
 Lemma sim_dol_inv : ∀ {A} e1' e2' (term : tm A),
   <| e1' $ e2' |> ~ₑ term → ∃ e1 e2, e1' ~ₑ e1 /\ e2' ~ₑ e2 /\ term = <{ e1 $ e2 }>.
@@ -345,6 +338,23 @@ Proof.
     repeat eexists; eauto.
 Qed.
 
+Lemma sim_plug_t_inv : ∀ {A} (t' : T' A) e' term,
+  <| t' [e'] |> ~ₑ term →
+  ∃ t e,
+    t' ~ₜ t /\
+    e' ~ₑ e /\
+    term = <{ t [e] }>.
+Proof.
+  intros A. induction t'; intros; cbn in *; eauto.
+  inversion H; clear H; subst. 
+  - reason.
+    rename k into k', v into v', v0 into v.
+    apply sim_plug_k_inv in H4 as [k [e [Hk [Hsim Hsub]]]]; subst.
+    apply IHt' in Hsim as [t [e0 [Ht [He Hsub]]]]; subst.
+    repeat eexists; eauto.
+  - destruct v'; inversion H0.
+Qed.
+
 Lemma sim_plug_inv : ∀ {A} (k' : K' A) (t' : T' A) e' term,
   <| k' [t' [e']] |> ~ₑ term →
   ∃ k t e,
@@ -352,7 +362,120 @@ Lemma sim_plug_inv : ∀ {A} (k' : K' A) (t' : T' A) e' term,
     t' ~ₜ t /\
     e' ~ₑ e /\
     term = <{ k [t [e]] }>.
+Proof.
+  intros.
+  apply sim_plug_k_inv in H as [k [e [Hk [H Hsub]]]]; subst.
+  apply sim_plug_t_inv in H as [t [s [Ht [H Hsub]]]]; subst.
+  repeat eexists; auto.
+Qed.
+
+
+Lemma sim_map : ∀ {A} {e' e B} {f : A → B},
+  e' ~ₑ e →
+  map' f e' ~ₑ map f e.
+Proof with auto.
+  intros. generalize dependent B.
+  induction H using sim_tm_mut with
+    (P0 := λ A j' j, ∀ B (f : A → B), mapJ' f j' ~ⱼ mapJ f j)
+    (P1 := λ A k' k, ∀ B (f : A → B), mapK' f k' ~ₖ mapK f k);
+  intros; cbn; auto; reason; subst;
+  try rewrite <- lift_val_to_tm;
+  try rewrite <- lift_val_to_tm';
+  try rewrite <- lift_map;
+  try rewrite <- lift_map'...
+  
+  (* sim_eta *)
+  rename v0 into v.
+  destruct (map_val_is_val  v  f) as [v2  Hrv ]. 
+  destruct (map_val_is_val' v' f) as [v2' Hrv']. 
+  rewrite Hrv; rewrite Hrv'.
+  rewrite lift_val_to_tm.
+  apply sim_eta.
+  rewrite <- Hrv; rewrite <- Hrv'.
+  apply IHsim_tm.
+
+  (* sim_beta *)
+  rename v0 into v1, v' into v1'.
+  destruct (map_val_is_val  v1  f) as [w1  Hrv1 ]. 
+  destruct (map_val_is_val' v1' f) as [w1' Hrv1'].
+  rewrite Hrv1; rewrite Hrv1'.
+  rewrite lift_val_to_tm; rewrite lift_val_to_tm'.
+  rewrite map_plug_k_is_plug_of_maps.
+  rewrite map_plug_k_is_plug_of_maps'.
+  rewrite <- lift_mapK.
+  rewrite <- lift_mapK'.
+  change (map (option_map f) <{ (λ {map (option_map Some) e}) 0 }>) with <{ {map (option_map f) <{ ↑(λ e) }> } 0 }>.
+  rewrite <- lift_map.
+  apply sim_beta...
+  rewrite <- Hrv1; rewrite <- Hrv1'...
+
+  (* sim_let_new *)
+  rewrite map_plug_j_is_plug_of_maps'. cbn.
+  rewrite map_plug_j_is_plug_of_maps.
+  rewrite <- lift_mapJ'.
+  apply sim_let_new...
+
+  (* J *)
+  constructor.
+  rewrite mapV_is_map.
+  rewrite mapV_is_map'...
+
+  (* K *)
+  rewrite map_plug_j_is_plug_of_maps'. cbn.
+  rewrite <- lift_mapJ'.
+  constructor...
+Qed.
+Global Hint Resolve sim_map : core.
+
+Lemma sim_bind : ∀ {A} {e' e B} {f' : A → tm' B} {f : A → tm B},
+  e' ~ₑ e →
+  (∀ a, f' a ~ₑ f a) →
+  bind' f' e' ~ₑ bind f e.
 Admitted.
+(* Proof with auto.
+  intros. generalize dependent B.
+  induction H; intros; cbn; auto;
+  try solve [constructor; apply IHsim_tm; auto; intros [a|]; auto];
+  try rewrite <- lift_val_to_tm;
+  try rewrite <- lift_val_to_tm';
+  try (rewrite bind_lift + rewrite bind_lift'); try rewrite lambda_match_just_some;
+  try change (λ a : A, map Some (f a)) with (lift ∘ f);
+  try change (λ a : A, map' Some (f' a)) with (lift ∘ f');
+  try rewrite <- lift_bind';
+  try rewrite <- lift_bind;
+  reason; subst; auto.
+
+  (* sim_eta *)
+  rename v'0 into v'.
+  destruct (bind_val_is_val  v  f ) as [v2  Hrv ].
+  destruct (bind_val_is_val' v' f') as [v2' Hrv'].
+  rewrite Hrv; rewrite Hrv'.
+  rewrite lift_val_to_tm.
+  apply sim_eta.
+  rewrite <- Hrv; rewrite <- Hrv'...
+
+  (* ṣim_eta_dol *)
+  rename v'0 into v1'.
+  rename v' into v2'.
+  destruct (bind_val_is_val  v1  f ) as [w1  Hrv1 ].
+  destruct (bind_val_is_val' v1' f') as [w1' Hrv1'].
+  destruct (bind_val_is_val  v2  f ) as [w2  Hrv2 ].
+  destruct (bind_val_is_val' v2' f') as [w2' Hrv2']. 
+  rewrite Hrv1; rewrite Hrv1'; rewrite Hrv2; rewrite Hrv2'.
+  apply sim_eta_dol.
+  rewrite <- Hrv1; rewrite <- Hrv1'...
+  rewrite <- Hrv2; rewrite <- Hrv2'...
+
+  (* sim_let_arg *)
+  rename v' into v1'.
+  destruct (bind_val_is_val  v1  f ) as [w  Hrv ]. 
+  destruct (bind_val_is_val' v1' f') as [w' Hrv']. 
+  rewrite Hrv; rewrite Hrv'.
+  rewrite lift_val_to_tm'.
+  apply sim_let_arg...
+  rewrite <- Hrv; rewrite <- Hrv'...
+Qed. *)
+Global Hint Resolve sim_bind : core.
 
 Lemma sim_subst_lemma : ∀ e' e v' (v : val ␀),
   e' ~ₑ e →
@@ -463,6 +586,7 @@ Lemma sim_lift_j : ∀ {A} {j' : J' A} {j},
   ↑j' ~ⱼ ↑j.
 Proof.
   intros. inversion H; clear H; subst; cbn; auto.
+  constructor. rewrite mapV_is_map; rewrite mapV_is_map'. auto.
 Qed.
 Global Hint Resolve sim_lift_j : core.
 
@@ -787,7 +911,7 @@ Proof with auto.
       cbn. laws. auto.
     + rewrite <- Hsubl2.
       apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... repeat constructor...
-      apply sim_plug_k... apply sim_plug_j...
+      apply sim_plug_k... apply sim_plug_j... apply sim_lift_j...
   - rewrite lambda_to_val' in Hstep.
     rewrite fold_redex_shift' in Hstep.
     apply plug_step_inv in Hstep; subst. cbn.

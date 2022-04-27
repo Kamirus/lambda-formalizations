@@ -86,10 +86,21 @@ Fixpoint map {A B : Type} (f : A -> B) (e : tm A) : tm B :=
   | <{ e1 $ e2 }> => <{ {map f e1} $ {map f e2} }>
   end.
 
+Definition mapV {A B} (f : A → B) (v : val A) : val B :=
+  match v with
+  | val_abs e => val_abs (map (option_map f) e)
+  end.
+
 Lemma map_val_is_val : ∀ {A B} (v : val A) (f : A → B),
   ∃ w, map f (val_to_tm v) = val_to_tm w.
 Proof.
   intros. destruct v; cbn. eexists <{ λv _ }>. reflexivity.
+Qed.
+
+Lemma mapV_is_map : ∀ {A B} v (f : A → B),
+  val_to_tm (mapV f v) = map f (val_to_tm v).
+Proof.
+  intros. destruct v; auto.
 Qed.
 
 Lemma map_map_law : forall A e B C (f:A->B) (g:B->C),
@@ -99,6 +110,14 @@ Proof.
   induction e; intros; cbn; auto;
   try solve [f_equal; rewrite IHe; rewrite option_map_comp_law; auto];
   try solve [rewrite IHe1; rewrite IHe2; reflexivity].
+Qed.
+
+Lemma mapV_mapV_law : forall A v B C (f : A → B) (g : B → C),
+  mapV g (mapV f v) = mapV (g ∘ f) v.
+Proof.
+  destruct v; intros; cbn; auto.
+  rewrite map_map_law.
+  rewrite option_map_comp_law. reflexivity.
 Qed.
 
 (* Notation "f <$> a" := (map f a) (at level 40, left associativity). *)
@@ -382,10 +401,7 @@ Qed.
 
 Instance LiftTm : Lift tm := λ {A}, map Some.
 
-Definition liftV {A : Type} (v : val A) : val ^A :=
-  match v with
-  | val_abs e => val_abs (map (option_map Some) e)
-  end.
+Definition liftV {A : Type} (v : val A) : val ^A := mapV Some v.
 
 Lemma lift_val_to_tm : ∀ {A} (v : val A),
   ↑ (val_to_tm v) = val_to_tm (liftV v).
@@ -393,20 +409,40 @@ Proof.
   intros. destruct v; cbn. reflexivity.
 Qed.
 
-Definition liftJ {A : Type} (j : J A) : J ^A := 
+Definition mapJ {A B} (f : A → B) (j : J A) : J B := 
   match j with
-  | J_fun e => J_fun (↑e)
-  | J_arg v => J_arg (liftV v)
-  | J_dol e => J_dol (↑e)
+  | J_fun e => J_fun (map f e)
+  | J_arg v => J_arg (mapV f v)
+  | J_dol e => J_dol (map f e)
   end.
-Instance LiftJ : Lift J := @liftJ.
 
-Fixpoint liftK {A : Type} (k : K A) : K ^A :=
+Lemma mapJ_mapJ_law : forall A j B C (f : A → B) (g : B → C),
+  mapJ g (mapJ f j) = mapJ (g ∘ f) j.
+Proof.
+  destruct j; intros; cbn;
+  try rewrite map_map_law;
+  try rewrite mapV_mapV_law;
+  auto.
+Qed.
+
+Fixpoint mapK {A B} (f : A → B) (k : K A) : K B := 
   match k with
   | K_nil => K_nil
-  | K_cons j k => K_cons (↑j) (liftK k)
+  | K_cons j1 k2 => K_cons (mapJ f j1) (mapK f k2)
   end.
-Instance LiftK : Lift K := @liftK.
+
+Lemma mapK_mapK_law : forall A k B C (f : A → B) (g : B → C),
+  mapK g (mapK f k) = mapK (g ∘ f) k.
+Proof.
+  induction k; intros; cbn; auto.
+  rewrite mapJ_mapJ_law.
+  rewrite IHk.
+  reflexivity.
+Qed.
+
+Instance LiftJ : Lift J := λ {A}, mapJ Some.
+
+Instance LiftK : Lift K := λ {A}, mapK Some.
 
 
 Definition contract (r : redex ␀) : tm ␀ :=
@@ -649,6 +685,29 @@ Proof.
   rewrite map_bind_law. reflexivity.
 Qed.
 
+Lemma map_plug_j_is_plug_of_maps : ∀ {A B} j e (f : A → B),
+  map f <{ j[e] }> = <{ {mapJ f j} [{map f e}] }>.
+Proof.
+  intros. destruct j; cbn; try destruct v; auto.
+Qed.
+
+Lemma map_plug_k_is_plug_of_maps : ∀ {A B} (k : K A) e (f : A → B),
+  map f <{ k[e] }> = <{ {mapK f k} [{map f e}] }>.
+Proof.
+  intros A B. generalize dependent B.
+  induction k; intros; cbn; auto.
+  rewrite map_plug_j_is_plug_of_maps.
+  rewrite IHk. reflexivity.
+Qed.
+
+Lemma lift_mapK : ∀ {A B} k (f : A → B),
+  ↑(mapK f k) = mapK (option_map f) (↑k).
+Proof.
+  intros. unfold lift. unfold LiftK.
+  repeat rewrite mapK_mapK_law.
+  f_equal.
+Qed.
+
 Lemma subst_lift : ∀ {A} (e : tm A) v,
   <{ (↑e) [0 := v] }> = e.
 Proof.
@@ -669,7 +728,9 @@ Lemma bind_var_subst_lift_j : ∀ {A} (j : J A) e v,
   bind (var_subst (val_to_tm v)) <{ ↑j[e] }> = <{ j [{bind (var_subst (val_to_tm v)) e}] }>.
 Proof.
   intros; destruct j; cbn; auto;
+  try change (mapV Some v0) with (liftV v0);
   try rewrite <- lift_val_to_tm;
+  try change (map Some t) with <{ ↑t }>;
   try rewrite bind_var_subst_lift; reflexivity.
 Qed.
 
@@ -677,5 +738,6 @@ Lemma bind_var_subst_lift_k : ∀ {A} (k : K A) e v,
   bind (var_subst (val_to_tm v)) <{ ↑k[e] }> = <{ k [{bind (var_subst (val_to_tm v)) e}] }>.
 Proof.
   induction k; intros; cbn; auto.
+  change (mapJ Some j) with (↑j).
   rewrite bind_var_subst_lift_j. unfold tm_subst0. rewrite IHk. reflexivity.
 Qed.
