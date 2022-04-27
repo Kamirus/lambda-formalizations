@@ -961,6 +961,11 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma fold_redex_shift' : ∀ (w v : val' ␀),
+  <| w $ S₀ v |> = redex_shift' w v.
+Proof.
+  intros. auto.
+Qed.
 
 Lemma plug_shift_step_inv' : ∀ (k0 : K' ␀) (t0 : T' ␀) (w : val' ␀) (k : K' ␀) (v : val' ␀) e term,
   <| k0 [t0 [w $ k [let S₀ v in e]]] |> -->' term → ∃ inner,
