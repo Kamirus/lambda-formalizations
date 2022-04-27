@@ -875,6 +875,27 @@ Proof.
   apply subst_lift'.
 Qed.
 
+Lemma bind_var_subst_lift_j' : ∀ {A} (j : J' A) e v,
+  bind' (var_subst' (val_to_tm' v)) <| ↑j[e] |> = <| j [{bind' (var_subst' (val_to_tm' v)) e}] |>.
+Proof.
+  intros; destruct j; cbn; auto;
+  try rewrite <- lift_val_to_tm';
+  try rewrite bind_var_subst_lift'; reflexivity.
+Qed.
+
+Lemma bind_var_subst_lift_k' : ∀ {A} (k : K' A) e v,
+  bind' (var_subst' (val_to_tm' v)) <| ↑k[e] |> = <| k [{bind' (var_subst' (val_to_tm' v)) e}] |>.
+Proof.
+  induction k; intros; cbn; auto.
+  rewrite IHk.
+  f_equal.
+  rewrite bind_map_law'.
+  assert ((λ a, match option_map Some a with Some a0 => map' Some (var_subst' v a0) | None => <| 0 |> end) = (λ a, <| var a |>)).
+  apply functional_extensionality; intros [a|]; cbn; auto.
+  rewrite H.
+  apply bind_pure'.
+Qed.
+
 Lemma subst_plug_of_lift_j : ∀ {A} (j : J' A) (v : val' A),
   <| (↑j[0])[0 := v] |> = <| j[v] |>.
 Proof.

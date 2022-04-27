@@ -665,6 +665,21 @@ Proof.
   apply subst_lift.
 Qed.
 
+Lemma bind_var_subst_lift_j : ∀ {A} (j : J A) e v,
+  bind (var_subst (val_to_tm v)) <{ ↑j[e] }> = <{ j [{bind (var_subst (val_to_tm v)) e}] }>.
+Proof.
+  intros; destruct j; cbn; auto;
+  try rewrite <- lift_val_to_tm;
+  try rewrite bind_var_subst_lift; reflexivity.
+Qed.
+
+Lemma bind_var_subst_lift_k : ∀ {A} (k : K A) e v,
+  bind (var_subst (val_to_tm v)) <{ ↑k[e] }> = <{ k [{bind (var_subst (val_to_tm v)) e}] }>.
+Proof.
+  induction k; intros; cbn; auto.
+  rewrite bind_var_subst_lift_j. unfold tm_subst0. rewrite IHk. reflexivity.
+Qed.
+
 Lemma lift_rewrite_plug_k_j : ∀ {A} (k : K A) (j : J A) (kj : K A),
   (∀ e, <{  k [ j [e]] }> = <{  kj [e] }>) →
   (∀ e, <{ ↑k [↑j [e]] }> = <{ ↑kj [e] }>).

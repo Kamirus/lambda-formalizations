@@ -2,11 +2,6 @@ Require Export Common.
 Require Export LambdaDollar.
 Require Export LambdaLetDollar.
 
-Inductive sim_J_F {A} (R : tm' A → tm A → Prop) : J' A → J A → Prop :=
-| sim_J_fun : ∀ (e' : tm'  A) (e : tm  A), R e' e → sim_J_F R (J_fun' e') (J_fun e)
-| sim_J_arg : ∀ (v' : val' A) (v : val A), R v' v → sim_J_F R (J_arg' v') (J_arg v)
-| sim_J_dol : ∀ (e' : tm'  A) (e : tm  A), R e' e → sim_J_F R (J_dol' e') (J_dol e)
-.
 Reserved Notation "e' ~ₑ e" (at level 40).
 Reserved Notation "v' ~ᵥ v" (at level 40).
 Reserved Notation "p' ~ₚ p" (at level 40).
@@ -21,7 +16,6 @@ Inductive sim_tm {A} : tm' A → tm A → Prop :=
     <| var a |> ~ₑ <{ var a }>
 | sim_abs  : ∀ e' e, e' ~ₑ e →
     <| λ  e' |> ~ₑ <{ λ   e }>
-(* | sim_s_0  : ∀ e e', e ~ₑ e' → <{ S₀ e }> ~ₑ <| S₀, e' |> *)
 | sim_s_0  :
     <| S₀ |> ~ₑ <{ λ S₀ 1 0 }>
 | sim_app  : ∀ e1' e2' e1 e2, e1' ~ₑ e1 → e2' ~ₑ e2 →
@@ -32,31 +26,15 @@ Inductive sim_tm {A} : tm' A → tm A → Prop :=
     <| let e1' in e2' |> ~ₑ <{ (λ e2) e1 }>
 | sim_eta  : ∀ (v' : val' A) (v : val A), v' ~ₑ v →
     v' ~ₑ <{ λ {liftV v} $ 0 }>
-| sim_beta : ∀ (v' : val' A) (v : val A) e' e, v' ~ₑ v → e' ~ₑ e →
-    <| λ {liftV' v'} $ e' |> ~ₑ <{ λ {liftV v} $ ↑(λ e) 0 }> (* todo: k [↑(λ e) 0] *)
-(* | sim_eta_dol : ∀ (v1 v2 : val A) (v1' v2' : val' A),
-    v1 ~ₑ v1' → v2 ~ₑ v2' → <{ v1 $ v2 }> ~ₑ <| v1' v2' |> *)
-| sim_let_fun : ∀ e1' e2' e1 e2, e1' ~ₑ e1 → e2' ~ₑ e2 →
-    <| let e1' in (        0   ↑e2') |> ~ₑ <{ e1   e2 }>
-| sim_let_arg : ∀ (v1' : val' A) e2' (v1 : val A) e2, v1' ~ₑ v1 → e2' ~ₑ e2 →
-    <| let e2' in ({liftV' v1'}  0 ) |> ~ₑ <{ v1   e2 }>
-| sim_let_dol : ∀ e1' e2' e1 e2, e1' ~ₑ e1 → e2' ~ₑ e2 →
-    <| let e1' in (        0 $ ↑e2') |> ~ₑ <{ e1 $ e2 }>
-(* | sim_let_assoc : ∀ ,
-    <| let S₀ v1' in let e2' in {map' (option_map Some) e3'} |> ~ₑ
-    <{  }> *)
-(* | sim_dol_let : ∀ (v' : val' A) e' (w' : val' A) (v : val A) e (w : val A),
-    v' ~ₑ v → e' ~ₑ e → w' ~ₑ w →
-    <| (λ {liftV' v'} $ e') $ S₀ w' |> ~ₑ <{ v $ (λ e) (S₀ {liftV w} 0) }> *)
-where "e' ~ₑ e" := (sim_tm  e' e)
-and   "j' ~ⱼ j" := (sim_J_F sim_tm j' j).
-Inductive sim_val {A} : val' A → val A → Prop :=
-| sim_val_abs : ∀ v' v, val_to_tm' v' ~ₑ val_to_tm v → v' ~ᵥ v
-where "v' ~ᵥ v" := (sim_val v' v).
-Inductive sim_non {A} : non' A → non A → Prop :=
-| sim_non_ : ∀ p p', non_to_tm' p' ~ₑ non_to_tm p → p' ~ₚ p
-where "p' ~ₚ p" := (sim_non p' p).
-Inductive sim_K {A} : K' A → K A → Prop :=
+| sim_beta : ∀ (v' : val' A) (v : val A) k' k e' e, v' ~ₑ v → k' ~ₖ k → e' ~ₑ e →
+    <| λ {liftV' v'} $ ↑k'[e'] |> ~ₑ <{ λ {liftV v} $ ↑k [↑(λ e) 0] }>
+| sim_let_new : ∀ j' j e' e, j' ~ⱼ j → e' ~ₑ e →
+    <| let e' in ↑j'[0] |> ~ₑ <{ j[e] }>
+with sim_J {A} : J' A → J A → Prop :=
+| sim_J_fun : ∀ (e' : tm'  A) (e : tm  A), e' ~ₑ e → J_fun' e' ~ⱼ J_fun e
+| sim_J_arg : ∀ (v' : val' A) (v : val A), v' ~ₑ v → J_arg' v' ~ⱼ J_arg v
+| sim_J_dol : ∀ (e' : tm'  A) (e : tm  A), e' ~ₑ e → J_dol' e' ~ⱼ J_dol e
+with sim_K {A} : K' A → K A → Prop :=
 | sim_K_nil  :
     K_nil' ~ₖ K_nil
 | sim_K_cons : ∀ j' j k' k,
@@ -67,7 +45,20 @@ Inductive sim_K {A} : K' A → K A → Prop :=
     e' ~ₑ e →
     k' ~ₖ k →
     K_let' k' e' ~ₖ K_cons (J_arg <{ λv e }>) k
-where "k' ~ₖ k" := (sim_K k' k).
+where "e' ~ₑ e" := (sim_tm  e' e)
+and   "j' ~ⱼ j" := (sim_J j' j)
+and   "k' ~ₖ k" := (sim_K k' k).
+Scheme sim_tm_mut := Minimality for sim_tm Sort Prop
+with   sim_J_mut  := Minimality for sim_J Sort Prop
+with   sim_K_mut  := Minimality for sim_K Sort Prop.
+(* Minimality vs Induction : the former does not include a proof of ~ in the predicate P *)
+
+Inductive sim_val {A} : val' A → val A → Prop :=
+| sim_val_abs : ∀ v' v, val_to_tm' v' ~ₑ val_to_tm v → v' ~ᵥ v
+where "v' ~ᵥ v" := (sim_val v' v).
+Inductive sim_non {A} : non' A → non A → Prop :=
+| sim_non_ : ∀ p p', non_to_tm' p' ~ₑ non_to_tm p → p' ~ₚ p
+where "p' ~ₚ p" := (sim_non p' p).
 Inductive sim_T {A} : T' A → T A → Prop :=
 | sim_T_nil  :
     T_nil' ~ₜ T_nil
@@ -77,18 +68,12 @@ Inductive sim_T {A} : T' A → T A → Prop :=
     t' ~ₜ t →
     T_cons' v' k' t' ~ₜ T_cons v k t
 where "t' ~ₜ t" := (sim_T t' t).
-Global Hint Constructors sim_J_F : core.
+Global Hint Constructors sim_J : core.
 Global Hint Constructors sim_K : core.
 Global Hint Constructors sim_T : core.
 Global Hint Constructors sim_val : core.
 Global Hint Constructors sim_non : core.
 Global Hint Constructors sim_tm : core.
-
-Axiom sim_beta_k : ∀ {A} (v' : val' A) (v : val A) k' k e' e,
-  v' ~ₑ v →
-  k' ~ₖ k →
-  e' ~ₑ e →
-  <| λ {liftV' v'} $ k'[e'] |> ~ₑ <{ λ {liftV v} $ k [↑(λ e) 0] }>.
 
 Reserved Notation "e' ~' e" (at level 40).
 Inductive sim' : tm' ␀ → tm ␀ → Prop :=
@@ -129,6 +114,23 @@ Inductive sim : tm' ␀ → tm ␀ → Prop :=
     <| k0'[t0'[let S₀ v' in ↑k'[e']]] |> ~ <{ k0[t0[k[(λ e) (S₀ {liftV v} 0)]]] }> *)
 where "e' ~ e" := (sim e' e).
 Global Hint Constructors sim : core.
+
+Lemma sim_let_fun : ∀ {A} (e1' : tm' A) e2' e1 e2, e1' ~ₑ e1 → e2' ~ₑ e2 →
+  <| let e1' in (0 ↑e2') |> ~ₑ <{ e1 e2 }>.
+Proof.
+  intros. apply (sim_let_new (J_fun' _) (J_fun _)); auto.
+  Qed.
+Lemma sim_let_arg : ∀ {A} (v1' : val' A) e2' (v1 : val A) e2, v1' ~ₑ v1 → e2' ~ₑ e2 →
+  <| let e2' in ({liftV' v1'} 0 ) |> ~ₑ <{ v1 e2 }>.
+Proof.
+  intros. apply (sim_let_new (J_arg' _) (J_arg _)); auto.
+  Qed.
+Lemma sim_let_dol : ∀ {A} (e1' : tm' A) e2' e1 e2, e1' ~ₑ e1 → e2' ~ₑ e2 →
+  <| let e1' in (0 $ ↑e2') |> ~ₑ <{ e1 $ e2 }>.
+Proof.
+  intros. apply (sim_let_new (J_dol' _) (J_dol _)); auto.
+  Qed.
+Global Hint Resolve sim_let_fun sim_let_arg sim_let_dol : core.
 
 Fixpoint let_to_dollar {A} (e : tm' A) : tm A :=
   match e with
@@ -229,9 +231,7 @@ Proof.
   intros. inversion H; clear H; subst.
   - left; eauto.
   - destruct v'; inversion H0.
-  - right. eexists (J_fun' _), (J_fun _); repeat eexists; eauto.
-  - right. eexists (J_arg' _), (J_arg _); repeat eexists; eauto.
-  - right. eexists (J_dol' _), (J_dol _); repeat eexists; eauto.
+  - right. repeat eexists; eauto.
 Qed.
 
 Lemma sim_plug_j : ∀ {A} (j' : J' A) j e' e,
@@ -249,7 +249,6 @@ Lemma sim_plug_k : ∀ {A} (k' : K' A) k e' e,
 Proof.
   intros. generalize dependent e. generalize dependent e'.
   induction H; intros; cbn; auto.
-  inversion H; clear H; subst; cbn; constructor; auto.
 Qed.
 
 Lemma sim_plug_t : ∀ {A} (t' : T' A) t e' e,
@@ -283,6 +282,18 @@ Proof with auto.
     constructor...
 Qed.
 
+Lemma sim_plug_j_inv : ∀ {A} (j' : J' A) e' term,
+  <| j' [e'] |> ~ₑ term →
+  ∃ j e,
+    j' ~ⱼ j /\
+    e' ~ₑ e /\
+    term = <{ j [e] }>.
+Proof.
+  intros. destruct j'; cbn in *; inversion H; clear H; subst; reason;
+  try solve [eexists (J_fun _) + eexists (J_arg _) + eexists (J_dol _); repeat eexists; eauto];
+  destruct v'; inversion H0.
+Qed.
+
 Lemma sim_plug_k_inv : ∀ {A} (k' : K' A) e' term,
   <| k' [e'] |> ~ₑ term →
   ∃ k e,
@@ -295,17 +306,12 @@ Proof.
   try solve [destruct v'; inversion H0; auto].
 
   (* sim_let *)
-  apply IHk' in H2 as [k [e [Hk [He Hsub]]]]; subst.
-  repeat eexists; eauto.
+  - apply IHk' in H2 as [k [e [Hk [He Hsub]]]]; subst.
+    repeat eexists; eauto.
 
-  apply IHk' in H2 as [k [e [Hk [He Hsub]]]]; subst.
-  eexists _, _; split; try apply (sim_K_cons (J_fun' e2')); eauto.
-
-  apply IHk' in H4 as [k [e [Hk [He Hsub]]]]; subst.
-  eexists _, _; split; try apply (sim_K_cons (J_arg' v1')); eauto.
-
-  apply IHk' in H2 as [k [e [Hk [He Hsub]]]]; subst.
-  eexists _, _; split; try apply (sim_K_cons (J_dol' e2')); eauto.
+  (* sim_let_new *)
+  - apply IHk' in H4 as [k [e0 [Hk [He0 Hsub]]]]; subst.
+    repeat eexists; eauto.
 Qed.
 
 Lemma sim_plug_inv : ∀ {A} (k' : K' A) (t' : T' A) e' term,
@@ -342,8 +348,12 @@ Ltac laws := repeat(
   match goal with
   | |- context C [bind  (var_subst  _) (↑ _)] =>
       rewrite bind_var_subst_lift
+  | |- context C [bind  (var_subst  _) <{ ↑?k[?e] }>] =>
+      rewrite bind_var_subst_lift_k
   | |- context C [bind' (var_subst' _) (↑ _)] =>
       rewrite bind_var_subst_lift'
+  | |- context C [bind' (var_subst' _) <| ↑?k[?e] |>] =>
+      rewrite bind_var_subst_lift_k'
   end).
 
 Example example_beta_exp_subst : ∀ (e : tm ^␀) (v : val ␀),
@@ -375,10 +385,11 @@ Proof with auto.
   - rename e'0 into e', v'0 into v0'.
     repeat eexists.
     + eapply multi_contr_multi. apply contr_beta.
-      remember <{ λ e }> as t eqn:Heqt. cbn. laws. subst.
-      eapply multi_delim. apply multi_contr. auto.
-    + cbn. laws. change (bind' (var_subst' v0') e') with (tm_subst0' e' v0').
+      remember <{ λ e }> as t eqn:Heqt. repeat (cbn; laws). subst.
+      eapply multi_delim. eapply multi_k. apply multi_contr. auto.
+    + repeat (cbn; laws). change (bind' (var_subst' v0') e') with (tm_subst0' e' v0').
       constructor...
+      apply sim_plug_k...
       apply (sim_subst_lemma e' e v0' v0)...
 Qed.
 
@@ -584,19 +595,7 @@ Proof with auto.
         auto.
       + apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... constructor...
         change (val_to_tm (liftV <{ λv e2 }>)) with <{ ↑(λ e2) }>.
-        apply sim_beta...
-    * apply sim_app_inv in H1 as [es [e1_4 [Hes [He2 Hsub]]]]; reason; subst.
-      eapply sim_s_0_app in Hes.
-      repeat eexists.
-      + eapply multi_k'. eapply multi_t'.
-        eapply multi_contr_multi'. apply (contr_shift' (val_abs' _)). auto.
-      + eapply multi_k. eapply multi_t.
-        eapply multi_trans.
-        eapply multi_delim. apply (multi_j (J_fun _) Hes). cbn.
-        eapply multi_contr_multi. apply (contr_shift _ (K_cons (J_fun _) K_nil)).
-        cbn. laws.
-        auto.
-      + apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... repeat constructor...
+        apply (sim_beta _ _ K_nil' K_nil)...
     * apply sim_app_inv in H3 as [es [e1_4 [Hes [He2 Hsub]]]]; reason; subst.
       eapply sim_s_0_app in Hes.
       repeat eexists.
@@ -604,35 +603,18 @@ Proof with auto.
         eapply multi_contr_multi'. apply (contr_shift' (val_abs' _)). auto.
       + eapply multi_k. eapply multi_t.
         eapply multi_trans.
-        eapply multi_delim. apply (multi_j (J_arg _) Hes). cbn.
-        eapply multi_contr_multi. apply (contr_shift _ (K_cons (J_arg _) K_nil)).
+        eapply multi_delim. apply (multi_j _ Hes). cbn.
+        eapply multi_contr_multi. apply (contr_shift _ (K_cons _ K_nil)).
         cbn. laws.
         auto.
-      + apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... repeat constructor...
-    * apply sim_app_inv in H1 as [es [e1_4 [Hes [He2 Hsub]]]]; reason; subst.
-      eapply sim_s_0_app in Hes.
-      repeat eexists.
-      + eapply multi_k'. eapply multi_t'.
-        eapply multi_contr_multi'. apply (contr_shift' (val_abs' _)). auto.
-      + eapply multi_k. eapply multi_t.
-        eapply multi_trans.
-        eapply multi_delim. apply (multi_j (J_dol _) Hes). cbn.
-        eapply multi_contr_multi. apply (contr_shift _ (K_cons (J_dol _) K_nil)).
-        cbn. laws.
-        auto.
-      + apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... repeat constructor...
+      + apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... repeat constructor... apply sim_plug_j...
   }
 
   (* redex_let' *)
   { repeat eexists; auto.
     apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t...
-    destruct j; cbn in *.
-    - apply sim_app_inv in He as [n_ [e2 [He1 [He2 Hsub]]]]; reason; subst.
-      apply sim_let_fun...
-    - apply sim_app_inv in He as [v_ [e2 [He1 [He2 Hsub]]]]; reason; subst.
-      apply sim_let_arg...
-    - apply sim_dol_inv in He as [n_ [e2 [He1 [He2 Hsub]]]]; reason; subst.
-      apply sim_let_dol...
+    apply sim_plug_j_inv in He. destruct He as [j_ [e [Hj [He Hsub]]]]; subst.
+    constructor...
   }
 
   (* redex_let_beta' *)
@@ -797,7 +779,7 @@ Proof with auto.
           - eapply multi_k. eapply multi_t. eapply multi_contr_multi. apply contr_shift.
             cbn. laws. rewrite <- (lift_rewrite_plug_k_j _ (J_arg <{ λv e }>) _ Hsub2). cbn. auto.
           - apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... constructor...
-            apply sim_beta_k...
+            apply sim_beta...
         * eapply aux_K2 in Hstep as [term [Hmulti Hsim]]; eauto.
           repeat eexists.
           - auto.
