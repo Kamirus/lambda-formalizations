@@ -286,6 +286,33 @@ Proof with auto.
     constructor...
 Qed.
 
+Lemma plug_k_compose_ex : ∀ {A} {k1' : K' A} {k1 k2' k2},
+  k1' ~ₖ k1 →
+  k2' ~ₖ k2 →
+  ∃ k' k,
+    k' ~ₖ k /\
+    (∀ e', <|  k1' [ k2' [e']] |> = <|  k' [e'] |>) /\
+    (∀ e , <{  k1  [ k2  [e ]] }> = <{  k  [e ] }>) /\
+    (∀ e', <| ↑k1' [↑k2' [e']] |> = <| ↑k' [e'] |>) /\
+    (∀ e , <{ ↑k1  [↑k2  [e ]] }> = <{ ↑k  [e ] }>).
+Proof with auto.
+  induction k1'; intros k1 k2' k2 Hk1 Hk2; inversion Hk1; clear Hk1; subst; cbn.
+  - repeat eexists...
+  - destruct (IHk1' _ _ _ H3 Hk2) as [k0' [k0 [Hk0 [Hsub1 [Hsub2 [Hsubl1 Hsubl2]]]]]].
+    exists (K_let' k0' <| ↑j'[0] |>), (K_cons j k0); repeat split; auto; intros;
+    try rewrite Hsub1;
+    try rewrite Hsub2;
+    try rewrite Hsubl1;
+    try rewrite Hsubl2...
+  - destruct (IHk1' _ _ _ H3 Hk2) as [k0' [k0 [Hk0 [Hsub1 [Hsub2 [Hsubl1 Hsubl2]]]]]].
+    exists (K_let' k0' t), (K_arg <{ λv e }> k0); repeat split; auto; intros;
+    try rewrite Hsub1;
+    try rewrite Hsub2;
+    try rewrite Hsubl1;
+    try rewrite Hsubl2...
+    constructor...
+Qed.
+
 Lemma sim_plug_j_inv : ∀ {A} (j' : J' A) e' term,
   <| j' [e'] |> ~ₑ term →
   ∃ j e,
@@ -753,23 +780,23 @@ Proof with auto.
   - rewrite lambda_to_val' in Hstep.
     rewrite fold_redex_shift' in Hstep.
     apply plug_step_inv in Hstep; subst. cbn.
-    destruct (plug_k_compose H2 (sim_K_cons _ _ _ _ H3 sim_K_nil)) as [kj' [kj [Hkj [Hsub1 Hsub2]]]].
+    destruct (plug_k_compose_ex H2 (sim_K_cons _ _ _ _ H3 sim_K_nil)) as [kj' [kj [Hkj [_ [Hsub2 [_ Hsubl2]]]]]].
     cbn in *. rewrite Hsub2.
     repeat eexists.
     + eapply multi_k. eapply multi_t. eapply multi_contr_multi. apply contr_shift.
       cbn. laws. auto.
-    + eapply lift_rewrite_plug_k_j in Hsub2. rewrite <- Hsub2.
+    + rewrite <- Hsubl2.
       apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... repeat constructor...
       apply sim_plug_k... apply sim_plug_j...
   - rewrite lambda_to_val' in Hstep.
     rewrite fold_redex_shift' in Hstep.
     apply plug_step_inv in Hstep; subst. cbn.
-    destruct (plug_k_compose H2 (sim_K_let _ _ _ _ H3 sim_K_nil)) as [kj' [kj [Hkj [Hsub1 Hsub2]]]].
+    destruct (plug_k_compose_ex H2 (sim_K_let _ _ _ _ H3 sim_K_nil)) as [kj' [kj [Hkj [_ [Hsub2 [_ Hsubl2]]]]]].
     cbn in *. rewrite Hsub2.
     repeat eexists.
     + eapply multi_k. eapply multi_t. eapply multi_contr_multi. apply contr_shift.
       cbn. laws. auto.
-    + eapply (lift_rewrite_plug_k_j _ (J_arg <{ λv e }>)) in Hsub2. rewrite <- Hsub2.
+    + rewrite <- Hsubl2.
       apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... constructor...
       apply sim_beta...
 Qed.

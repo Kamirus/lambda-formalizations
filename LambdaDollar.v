@@ -679,8 +679,3 @@ Proof.
   induction k; intros; cbn; auto.
   rewrite bind_var_subst_lift_j. unfold tm_subst0. rewrite IHk. reflexivity.
 Qed.
-
-Lemma lift_rewrite_plug_k_j : ∀ {A} (k : K A) (j : J A) (kj : K A),
-  (∀ e, <{  k [ j [e]] }> = <{  kj [e] }>) →
-  (∀ e, <{ ↑k [↑j [e]] }> = <{ ↑kj [e] }>).
-Admitted.
