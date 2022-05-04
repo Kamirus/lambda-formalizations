@@ -494,6 +494,8 @@ Proof with auto.
   - destruct j; inversion H1.
 Qed.
 
+(* ANCHOR Simulation Step
+ *)
 Theorem dollar_step_to_let_multi : ∀ e1 e2 e1',
   e1 --> e2 →
   e1 ~ₑ e1' →
@@ -587,6 +589,8 @@ Proof with auto.
   }
 Qed.
 
+(* ANCHOR Simulation
+ *)
 Theorem dollar_multi_to_let_multi : ∀ e1 e2 e1',
   e1 -->* e2 →
   e1 ~ₑ e1' →

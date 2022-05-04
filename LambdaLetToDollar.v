@@ -2,6 +2,8 @@ Require Export Common.
 Require Export LambdaDollar.
 Require Export LambdaLetDollar.
 
+(* ANCHOR Similarity Relation
+ *)
 Reserved Notation "e' ~ₑ e" (at level 40).
 Reserved Notation "v' ~ᵥ v" (at level 40).
 Reserved Notation "p' ~ₚ p" (at level 40).
@@ -75,6 +77,8 @@ Global Hint Constructors sim_val : core.
 Global Hint Constructors sim_non : core.
 Global Hint Constructors sim_tm : core.
 
+(* ANCHOR Small-Steps Grouping: Context Build-Up
+ *)
 Reserved Notation "e' ~' e" (at level 40).
 Inductive sim' : tm' ␀ → tm ␀ → Prop :=
 | sim_assoc'  : ∀ k0' k0 t0' t0 v' v k' k j' j,
@@ -94,24 +98,12 @@ Inductive sim' : tm' ␀ → tm ␀ → Prop :=
 where "e' ~' e" := (sim' e' e).
 Global Hint Constructors sim' : core.
 
+(* ANCHOR Similarity Relation + Small-Steps Grouping
+ *)
 Reserved Notation "e' ~ e" (at level 40).
 Inductive sim : tm' ␀ → tm ␀ → Prop :=
 | sim_sim_tm : ∀ e' e, e' ~ₑ e → e' ~ e
 | sim_assoc  : ∀ e' e, e' ~' e → e' ~ e
-(* | sim_assoc  : ∀ k0' k0 t0' t0 v' v k' k j' j,
-    k0' ~ₖ k0 →
-    t0' ~ₜ t0 →
-    v' ~ᵥ v →
-    k' ~ₖ k →
-    j' ~ⱼ j →
-    <| k0'[t0'[let S₀ v' in ↑k'[↑j'[0]]]] |> ~ <{ k0[t0[k[j[S₀ {liftV v} 0]]]] }>
-| sim_assoc_let  : ∀ k0' k0 t0' t0 v' v k' k e' e,
-    k0' ~ₖ k0 →
-    t0' ~ₜ t0 →
-    v' ~ᵥ v →
-    k' ~ₖ k →
-    e' ~ₑ e →
-    <| k0'[t0'[let S₀ v' in ↑k'[e']]] |> ~ <{ k0[t0[k[(λ e) (S₀ {liftV v} 0)]]] }> *)
 | sim_pre_shift     : ∀ k0' k0 t0' t0 v' v k' k j' j w' w, k0' ~ₖ k0 → t0' ~ₜ t0 → v' ~ᵥ v → k' ~ₖ k → j' ~ⱼ j → w' ~ᵥ w →
     <| k0' [t0' [(λ {liftV' v'} $ ↑k'[↑j'[0]]) $ S₀ w']] |> ~ <{ k0 [t0 [v $ k [j [S₀ {liftV w} 0]]]] }>
 | sim_pre_shift_let : ∀ k0' k0 t0' t0 v' v k' k e' e w' w, k0' ~ₖ k0 → t0' ~ₜ t0 → v' ~ᵥ v → k' ~ₖ k → e' ~ₑ e → w' ~ᵥ w →
@@ -715,6 +707,8 @@ Proof with auto.
   - apply (sim_assoc_let' K_nil' K_nil)...
 Qed.
 
+(* ANCHOR Simulation Step: ~ₑ to ~
+ *)
 Lemma let_step_to_dollar_multi_aux : ∀ e1' e2' e1,
   e1' -->' e2' →
   e1' ~ₑ e1 →
@@ -897,6 +891,8 @@ Proof with auto.
     apply (sim_assoc_let' k2' k2 T_nil' T_nil v' v (K_let' k' e2') (K_arg <{ λv e2 }> k))... constructor...
 Qed.
 
+(* ANCHOR Simulation Step
+ *)
 Theorem let_step_to_dollar_multi : ∀ e1' e2' e1,
   e1' -->' e2' →
   e1' ~ e1 →
@@ -956,6 +952,8 @@ Proof with auto.
       apply sim_beta...
 Qed.
 
+(* ANCHOR Simulation
+ *)
 Theorem let_multi_to_dollar_multi : ∀ e1' e2' e1,
   e1' -->'* e2' →
   e1' ~ e1 →
