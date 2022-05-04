@@ -93,6 +93,13 @@ Definition mapV {A B} (f : A → B) (v : val A) : val B :=
   | val_abs e => val_abs (map (option_map f) e)
   end.
 
+Definition mapP {A B : Type} (f : A -> B) (p : non A) : non B :=
+  match p with
+  | non_app e1 e2 => non_app (map f e1) (map f e2)
+  | non_dol e1 e2 => non_dol (map f e1) (map f e2)
+  | non_s_0 e' => non_s_0 (map (option_map f) e')
+  end.
+
 Lemma map_val_is_val : ∀ {A B} (v : val A) (f : A → B),
   ∃ w, map f (val_to_tm v) = val_to_tm w.
 Proof.
@@ -103,6 +110,12 @@ Lemma mapV_is_map : ∀ {A B} v (f : A → B),
   val_to_tm (mapV f v) = map f (val_to_tm v).
 Proof.
   intros. destruct v; auto.
+Qed.
+
+Lemma mapP_is_map : ∀ {A B} p (f : A → B),
+  non_to_tm (mapP f p) = map f (non_to_tm p).
+Proof.
+  intros. destruct p; auto.
 Qed.
 
 Lemma map_map_law : forall A e B C (f:A->B) (g:B->C),
@@ -149,6 +162,17 @@ Definition bindV {A B} (f : A → tm B) (v : val A) : val B :=
       end) e)
   end.
 
+Definition bindP {A B : Type} (f : A -> tm B) (p : non A) : non B :=
+  match p with
+  | non_app e1 e2 => non_app (bind f e1) (bind f e2)
+  | non_dol e1 e2 => non_dol (bind f e1) (bind f e2)
+  | non_s_0 e' => non_s_0 (bind (fun a' => 
+  match a' with
+  | None   => tm_var None
+  | Some a => map Some (f a)
+  end) e')
+  end.
+
 Lemma bind_val_is_val : ∀ {A B} (v : val A) (f : A → tm B),
   ∃ w, bind f (val_to_tm v) = val_to_tm w.
 Proof.
@@ -159,6 +183,12 @@ Lemma bindV_is_bind : ∀ {A B} v (f : A → tm B),
   val_to_tm (bindV f v) = bind f (val_to_tm v).
 Proof.
   intros. destruct v; auto.
+Qed.
+
+Lemma bindP_is_bind : ∀ {A B} p (f : A → tm B),
+  non_to_tm (bindP f p) = bind f (non_to_tm p).
+Proof.
+  intros. destruct p; auto.
 Qed.
 
 Lemma bind_map_law : ∀ {A B C} (f : B → tm C) (g : A → B) e,
