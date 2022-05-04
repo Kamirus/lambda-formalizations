@@ -480,12 +480,11 @@ Lemma sim_subst_lemma : ∀ e' e v' (v : val ␀),
   e' ~ₑ e →
   v' ~ᵥ v →
   <| e' [0 := v'] |> ~ₑ <{ e [0 := v] }>.
-Admitted.
-(* Proof.
+Proof.
   intros. unfold tm_subst0. unfold tm_subst0'.
   apply sim_bind; auto.
   intros [n|]; try destruct n; cbn. auto.
-Qed. *)
+Qed.
 
 Ltac laws := repeat(
   try match goal with
@@ -551,7 +550,16 @@ Lemma sim_redex_let_beta : ∀ (v' : val' ␀) e' elet v,
   v' ~ᵥ v → ∃ term,
     elet -->* term /\
     <| e' [0 := v'] |> ~ₑ term.
-Admitted.
+Proof with auto.
+  intros. inversion H; clear H; subst; reason.
+  - repeat eexists.
+    + eapply multi_contr. apply contr_beta.
+    + apply sim_subst_lemma...
+  - destruct v'0; inversion H1.
+  - repeat eexists.
+    + apply multi_refl.
+    + rewrite subst_plug_of_lift_j. apply sim_plug_j...
+Qed.
 
 Lemma sim_s_0_app : ∀ (es : tm ␀) (v : val ␀),
   <| S₀ |> ~ₑ es → <{ es v }> -->* <{ S₀ {↑(val_to_tm v)} 0 }>.
@@ -568,16 +576,18 @@ Qed.
 Lemma sim_lift : ∀ {A} {e' : tm' A} {e},
    e' ~ₑ  e →
   ↑e' ~ₑ ↑e.
-(* Proof.
+Proof.
   intros. unfold lift. unfold LiftTm'. unfold LiftTm. apply (sim_map H).
-Qed. *)
-Admitted.
+Qed.
 Global Hint Resolve sim_lift : core.
 
 Lemma sim_lift_val : ∀ {A} {v' : val' A} {v},
   v' ~ᵥ v →
   liftV' v' ~ᵥ liftV v.
-Admitted.
+Proof.
+  intros. constructor. rewrite <- lift_val_to_tm'. rewrite <- lift_val_to_tm. inversion H; clear H; subst.
+  apply sim_lift; auto. 
+Qed.
 Global Hint Resolve sim_lift_val : core.
 
 Lemma sim_lift_j : ∀ {A} {j' : J' A} {j},
@@ -592,7 +602,11 @@ Global Hint Resolve sim_lift_j : core.
 Lemma sim_lift_k : ∀ {A} {k' : K' A} {k},
    k' ~ₖ  k →
   ↑k' ~ₖ ↑k.
-Admitted.
+Proof with auto.
+  intros. induction H; cbn...
+  rewrite map_plug_j_is_plug_of_maps'. cbn. rewrite <- lift_mapJ'. apply sim_K_cons...
+  apply sim_lift_j...
+Qed.
 Global Hint Resolve sim_lift_k : core.
 
 Lemma t_inv_inner : ∀ (t' : T' ␀) (t : T ␀),
