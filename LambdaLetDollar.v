@@ -156,12 +156,28 @@ Fixpoint bind' {A B : Type} (f : A -> tm' B) (e : tm' A) : tm' B :=
       end) e2)
   end.
 
+Definition bindV' {A B} (f : A → tm' B) (v : val' A) : val' B :=
+  match v with
+  | val_s_0' => val_s_0'
+  | val_abs' e => val_abs' (bind' (fun a' => 
+      match a' with
+      | None   => tm_var' None
+      | Some a => map' Some (f a)
+      end) e)
+  end.
+
 Lemma bind_val_is_val' : ∀ {A B} (v : val' A) (f : A → tm' B),
   ∃ w, bind' f (val_to_tm' v) = val_to_tm' w.
 Proof.
   intros. destruct v; cbn.
   - eexists <| λv' _ |>. reflexivity.
   - eexists val_s_0'. reflexivity.
+Qed.
+
+Lemma bindV_is_bind' : ∀ {A B} v (f : A → tm' B),
+  val_to_tm' (bindV' f v) = bind' f (val_to_tm' v).
+Proof.
+  intros. destruct v; auto.
 Qed.
 
 Lemma bind_map_law' : ∀ {A B C} (f : B → tm' C) (g : A → B) e,
@@ -561,7 +577,70 @@ Instance LiftJ' : Lift J' := λ {A}, mapJ' Some.
 
 Instance LiftK' : Lift K' := λ {A}, mapK' Some.
 
-(* Notation "↑ e" := (lift' e) (at level 15). *)
+Definition bindJ' {A B} (f : A → tm' B) (j : J' A) : J' B := 
+  match j with
+  | J_fun' e => J_fun' (bind' f e)
+  | J_arg' v => J_arg' (bindV' f v)
+  | J_dol' e => J_dol' (bind' f e)
+  end.
+
+Fixpoint bindK' {A B} (f : A → tm' B) (k : K' A) : K' B := 
+  match k with
+  | K_nil' => K_nil'
+  | K_let' k1 e2 => K_let' (bindK' f k1) (bind' (fun a' => 
+      match a' with
+      | None   => tm_var' None
+      | Some a => map' Some (f a)
+      end) e2)
+  end.
+
+Lemma bindV_mapV_law' : ∀ {A B C} (f : B → tm' C) (g : A → B) v,
+  bindV' f (mapV' g v) = bindV' (λ a, f (g a)) v.
+Proof.
+  intros.
+  apply inj_val'. repeat rewrite bindV_is_bind'. rewrite mapV_is_map'.
+  apply bind_map_law'.
+Qed.
+
+Lemma bindJ_mapJ_law' : ∀ {A B C} (f : B → tm' C) (g : A → B) j,
+  bindJ' f (mapJ' g j) = bindJ' (λ a, f (g a)) j.
+Proof.
+  intros; destruct j; cbn; auto;
+  rewrite bind_map_law' + rewrite bindV_mapV_law'; auto.
+Qed.
+
+Lemma bindK_mapK_law' : ∀ {A B C} (f : B → tm' C) (g : A → B) k,
+  bindK' f (mapK' g k) = bindK' (λ a, f (g a)) k.
+Proof.
+  intros. generalize dependent B. generalize dependent C.
+  induction k; intros; cbn; auto.
+  rewrite IHk; f_equal.
+  rewrite bind_map_law'; f_equal.
+  apply functional_extensionality; intros [a|]; cbn; auto.
+Qed.
+
+Lemma mapV_bindV_law' : ∀ {A B C} (f : A → tm' B) (g : B → C) v,
+  bindV' (map' g ∘ f) v = mapV' g (bindV' f v).
+Proof.
+  intros. apply inj_val'. rewrite mapV_is_map'. repeat rewrite bindV_is_bind'. apply map_bind_law'.
+Qed.
+
+Lemma mapJ_bindJ_law' : ∀ {A B C} (f : A → tm' B) (g : B → C) j,
+  bindJ' (map' g ∘ f) j = mapJ' g (bindJ' f j).
+Proof.
+  intros; destruct j; intros; cbn; auto;
+  rewrite map_bind_law' + rewrite mapV_bindV_law'; auto.
+Qed.
+
+Lemma mapK_bindK_law' : ∀ {A B C} (f : A → tm' B) (g : B → C) k,
+  bindK' (map' g ∘ f) k = mapK' g (bindK' f k).
+Proof.
+  intros; generalize dependent B; generalize dependent C; induction k; intros; cbn; auto.
+  rewrite IHk; f_equal.
+  rewrite <- map_bind_law'; f_equal.
+  apply functional_extensionality; intros [a|]; cbn; auto.
+  change ((map' g ∘ f) a) with (map' g (f a)); repeat rewrite map_map_law'; f_equal.
+Qed.
 
 Definition contract' (r : redex' ␀) : tm' ␀ :=
   match r with
@@ -881,12 +960,44 @@ Proof.
   rewrite bind_map_law'. f_equal.
 Qed.
 
+Lemma bindJ_lift' : ∀ {A B} j (f : ^A → tm' B),
+  bindJ' f (↑j) = bindJ' (f ∘ Some) j.
+Proof.
+  intros.
+  unfold lift. unfold LiftJ'.
+  rewrite bindJ_mapJ_law'. f_equal.
+Qed.
+
+Lemma bindK_lift' : ∀ {A B} k (f : ^A → tm' B),
+  bindK' f (↑k) = bindK' (f ∘ Some) k.
+Proof.
+  intros.
+  unfold lift. unfold LiftK'.
+  rewrite bindK_mapK_law'. f_equal.
+Qed.
+
 Lemma lift_bind' : ∀ {A B} e (f : A → tm' B),
   ↑(bind' f e) = bind' (lift ∘ f) e.
 Proof.
   intros.
   unfold lift. unfold LiftTm'.
   rewrite map_bind_law'. reflexivity.
+Qed.
+
+Lemma lift_bindJ' : ∀ {A B} j (f : A → tm' B),
+  ↑(bindJ' f j) = bindJ' (lift ∘ f) j.
+Proof.
+  intros.
+  unfold lift. unfold LiftJ'. unfold LiftTm'.
+  rewrite mapJ_bindJ_law'. reflexivity.
+Qed.
+
+Lemma lift_bindK' : ∀ {A B} k (f : A → tm' B),
+  ↑(bindK' f k) = bindK' (lift ∘ f) k.
+Proof.
+  intros.
+  unfold lift. unfold LiftK'. unfold LiftTm'.
+  rewrite mapK_bindK_law'. reflexivity.
 Qed.
 
 Lemma map_plug_j_is_plug_of_maps' : ∀ {A B} j e (f : A → B),
@@ -897,6 +1008,20 @@ Qed.
 
 Lemma map_plug_k_is_plug_of_maps' : ∀ {A B} (k : K' A) e (f : A → B),
   map' f <| k[e] |> = <| {mapK' f k} [{map' f e}] |>.
+Proof.
+  intros A B. generalize dependent B.
+  induction k; intros; cbn; auto.
+  rewrite IHk. reflexivity.
+Qed.
+
+Lemma bind_plug_j_is_plug_of_binds' : ∀ {A B} j e (f : A → tm' B),
+  bind' f <| j[e] |> = <| {bindJ' f j} [{bind' f e}] |>.
+Proof.
+  intros. destruct j; cbn; try destruct v; auto.
+Qed.
+
+Lemma bind_plug_k_is_plug_of_binds' : ∀ {A B} (k : K' A) e (f : A → tm' B),
+  bind' f <| k[e] |> = <| {bindK' f k} [{bind' f e}] |>.
 Proof.
   intros A B. generalize dependent B.
   induction k; intros; cbn; auto.

@@ -120,16 +120,6 @@ Proof.
   rewrite option_map_comp_law. reflexivity.
 Qed.
 
-(* Notation "f <$> a" := (map f a) (at level 40, left associativity). *)
-
-(* Lemma map_id_law : forall {V} (f : V -> V) e,
-  (forall x, f x = x) ->
-  f <$> e = e.
-Admitted.
-Lemma map_comp_law : forall A e B C (f:A->B) (g:B->C),
-  g <$> (f <$> e) = g ∘ f <$> e.
-Admitted. *)
-
 
 Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
   match e with
@@ -148,10 +138,25 @@ Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
       end) e')
   end.
 
+Definition bindV {A B} (f : A → tm B) (v : val A) : val B :=
+  match v with
+  | val_abs e => val_abs (bind (fun a' => 
+      match a' with
+      | None   => tm_var None
+      | Some a => map Some (f a)
+      end) e)
+  end.
+
 Lemma bind_val_is_val : ∀ {A B} (v : val A) (f : A → tm B),
   ∃ w, bind f (val_to_tm v) = val_to_tm w.
 Proof.
   intros. destruct v; cbn. eexists <{ λv _ }>. reflexivity.
+Qed.
+
+Lemma bindV_is_bind : ∀ {A B} v (f : A → tm B),
+  val_to_tm (bindV f v) = bind f (val_to_tm v).
+Proof.
+  intros. destruct v; auto.
 Qed.
 
 Lemma bind_map_law : ∀ {A B C} (f : B → tm C) (g : A → B) e,
@@ -181,16 +186,6 @@ Proof.
     repeat rewrite map_map_law; f_equal];
   try solve [f_equal; apply IHe1 + apply IHe2].
 Qed.
-
-(* Notation "e >>= f" := (bind f e) (at level 20, left associativity). *)
-
-(* Lemma bind_is_map : forall A e B (f:A->B),
-  f <$> e = e >>= (fun v => tm_var (f v)).
-Admitted. *)
-
-(* Lemma bind_law : forall A e B C (f:A->tm B) (g:B->tm C),
-  e >>= f >>= g = e >>= (fun a => f a >>= g).
-Admitted. *)
 
 
 Definition var_subst {V} e' (v:^V) :=
@@ -444,6 +439,66 @@ Instance LiftJ : Lift J := λ {A}, mapJ Some.
 
 Instance LiftK : Lift K := λ {A}, mapK Some.
 
+Definition bindJ {A B} (f : A → tm B) (j : J A) : J B := 
+  match j with
+  | J_fun e => J_fun (bind f e)
+  | J_arg v => J_arg (bindV f v)
+  | J_dol e => J_dol (bind f e)
+  end.
+
+Fixpoint bindK {A B} (f : A → tm B) (k : K A) : K B := 
+  match k with
+  | K_nil => K_nil
+  | K_cons j1 k2 => K_cons (bindJ f j1) (bindK f k2)
+  end.
+
+Lemma bindV_mapV_law : ∀ {A B C} (f : B → tm C) (g : A → B) v,
+  bindV f (mapV g v) = bindV (λ a, f (g a)) v.
+Proof.
+  intros. destruct v; cbn.
+  rewrite bind_map_law. repeat f_equal.
+  apply functional_extensionality; intros [a|]; cbn; auto.
+Qed.
+
+Lemma bindJ_mapJ_law : ∀ {A B C} (f : B → tm C) (g : A → B) j,
+  bindJ f (mapJ g j) = bindJ (λ a, f (g a)) j.
+Proof.
+  intros. destruct j; cbn;
+  rewrite bind_map_law + rewrite bindV_mapV_law; auto.
+Qed.
+
+Lemma bindK_mapK_law : ∀ {A B C} (f : B → tm C) (g : A → B) k,
+  bindK f (mapK g k) = bindK (λ a, f (g a)) k.
+Proof.
+  intros. generalize dependent B. generalize dependent C.
+  induction k; intros; cbn; auto.
+  rewrite IHk; f_equal.
+  apply bindJ_mapJ_law.
+Qed.
+
+Lemma mapV_bindV_law : ∀ {A B C} (f : A → tm B) (g : B → C) v,
+  bindV (map g ∘ f) v = mapV g (bindV f v).
+Proof.
+  intros.
+  apply inj_val.
+  rewrite mapV_is_map.
+  repeat rewrite bindV_is_bind. apply map_bind_law.
+Qed.
+
+Lemma mapJ_bindJ_law : ∀ {A B C} (f : A → tm B) (g : B → C) j,
+  bindJ (map g ∘ f) j = mapJ g (bindJ f j).
+Proof.
+  intros. destruct j; cbn; rewrite map_bind_law + rewrite mapV_bindV_law; auto.
+Qed.
+
+Lemma mapK_bindK_law : ∀ {A B C} (f : A → tm B) (g : B → C) k,
+  bindK (map g ∘ f) k = mapK g (bindK f k).
+Proof.
+  intros; generalize dependent B; generalize dependent C; induction k; intros; cbn; auto.
+  rewrite IHk; f_equal.
+  apply mapJ_bindJ_law.
+Qed.
+
 
 Definition contract (r : redex ␀) : tm ␀ :=
   match r with
@@ -685,6 +740,22 @@ Proof.
   rewrite map_bind_law. reflexivity.
 Qed.
 
+Lemma bindK_lift : ∀ {A B} k (f : ^A → tm B),
+  bindK f (↑k) = bindK (f ∘ Some) k.
+Proof.
+  intros.
+  unfold lift. unfold LiftK.
+  rewrite bindK_mapK_law. f_equal.
+Qed.
+
+Lemma lift_bindK : ∀ {A B} e (f : A → tm B),
+  ↑(bindK f e) = bindK (lift ∘ f) e.
+Proof.
+  intros.
+  unfold lift. unfold LiftK. unfold LiftTm.
+  rewrite mapK_bindK_law. reflexivity.
+Qed.
+
 Lemma map_plug_j_is_plug_of_maps : ∀ {A B} j e (f : A → B),
   map f <{ j[e] }> = <{ {mapJ f j} [{map f e}] }>.
 Proof.
@@ -697,6 +768,21 @@ Proof.
   intros A B. generalize dependent B.
   induction k; intros; cbn; auto.
   rewrite map_plug_j_is_plug_of_maps.
+  rewrite IHk. reflexivity.
+Qed.
+
+Lemma bind_plug_j_is_plug_of_binds : ∀ {A B} j e (f : A → tm B),
+  bind f <{ j[e] }> = <{ {bindJ f j} [{bind f e}] }>.
+Proof.
+  intros. destruct j; cbn; try destruct v; auto.
+Qed.
+
+Lemma bind_plug_k_is_plug_of_binds : ∀ {A B} (k : K A) e (f : A → tm B),
+  bind f <{ k[e] }> = <{ {bindK f k} [{bind f e}] }>.
+Proof.
+  intros A B. generalize dependent B.
+  induction k; intros; cbn; auto.
+  rewrite bind_plug_j_is_plug_of_binds.
   rewrite IHk. reflexivity.
 Qed.
 

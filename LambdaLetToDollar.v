@@ -431,50 +431,49 @@ Lemma sim_bind : ∀ {A} {e' e B} {f' : A → tm' B} {f : A → tm B},
   e' ~ₑ e →
   (∀ a, f' a ~ₑ f a) →
   bind' f' e' ~ₑ bind f e.
-Admitted.
-(* Proof with auto.
+Proof with auto.
   intros. generalize dependent B.
-  induction H; intros; cbn; auto;
+  induction H using sim_tm_mut with
+    (P0 := λ A j' j, ∀ B (f' : A → tm' B) (f : A → tm B), (∀ a, f' a ~ₑ f a) → bindJ' f' j' ~ⱼ bindJ f j)
+    (P1 := λ A k' k, ∀ B (f' : A → tm' B) (f : A → tm B), (∀ a, f' a ~ₑ f a) → bindK' f' k' ~ₖ bindK f k);
+  intros; cbn; auto;
   try solve [constructor; apply IHsim_tm; auto; intros [a|]; auto];
   try rewrite <- lift_val_to_tm;
   try rewrite <- lift_val_to_tm';
-  try (rewrite bind_lift + rewrite bind_lift'); try rewrite lambda_match_just_some;
-  try change (λ a : A, map Some (f a)) with (lift ∘ f);
-  try change (λ a : A, map' Some (f' a)) with (lift ∘ f');
-  try rewrite <- lift_bind';
-  try rewrite <- lift_bind;
+  try rewrite bind_plug_k_is_plug_of_binds';
+  try rewrite bind_plug_k_is_plug_of_binds;
+  try rewrite bind_plug_j_is_plug_of_binds';
+  try rewrite bind_plug_j_is_plug_of_binds;
+  repeat (rewrite bind_lift + rewrite bind_lift' + rewrite bindK_lift + rewrite bindK_lift' + rewrite bindJ_lift');
+  repeat rewrite lambda_match_just_some;
+  try (
+    change (λ a : A, map Some (f a)) with (lift ∘ f) +
+    change (λ a : A, map' Some (f' a)) with (lift ∘ f');
+    rewrite <- lift_bind' +
+    rewrite <- lift_bind  + 
+    rewrite <- lift_bindJ');
   reason; subst; auto.
-
-  (* sim_eta *)
-  rename v'0 into v'.
-  destruct (bind_val_is_val  v  f ) as [v2  Hrv ].
-  destruct (bind_val_is_val' v' f') as [v2' Hrv'].
-  rewrite Hrv; rewrite Hrv'.
-  rewrite lift_val_to_tm.
-  apply sim_eta.
-  rewrite <- Hrv; rewrite <- Hrv'...
-
-  (* ṣim_eta_dol *)
-  rename v'0 into v1'.
-  rename v' into v2'.
-  destruct (bind_val_is_val  v1  f ) as [w1  Hrv1 ].
-  destruct (bind_val_is_val' v1' f') as [w1' Hrv1'].
-  destruct (bind_val_is_val  v2  f ) as [w2  Hrv2 ].
-  destruct (bind_val_is_val' v2' f') as [w2' Hrv2']. 
-  rewrite Hrv1; rewrite Hrv1'; rewrite Hrv2; rewrite Hrv2'.
-  apply sim_eta_dol.
-  rewrite <- Hrv1; rewrite <- Hrv1'...
-  rewrite <- Hrv2; rewrite <- Hrv2'...
-
-  (* sim_let_arg *)
-  rename v' into v1'.
-  destruct (bind_val_is_val  v1  f ) as [w  Hrv ]. 
-  destruct (bind_val_is_val' v1' f') as [w' Hrv']. 
-  rewrite Hrv; rewrite Hrv'.
-  rewrite lift_val_to_tm'.
-  apply sim_let_arg...
-  rewrite <- Hrv; rewrite <- Hrv'...
-Qed. *)
+  - apply sim_let...
+    apply IHsim_tm2; intros [a|]...
+  - rewrite <- bindV_is_bind; rewrite <- bindV_is_bind'.
+    rewrite lift_val_to_tm.
+    apply sim_eta.
+    rewrite bindV_is_bind; rewrite bindV_is_bind'...
+  - change (λ a, map' Some (f' a)) with (lift ∘ f'). rewrite <- lift_bind'.
+    rewrite <- bindV_is_bind; rewrite <- bindV_is_bind'.
+    rewrite lift_val_to_tm; rewrite lift_val_to_tm'.
+    rewrite <- lift_bindK. rewrite <- lift_bindK'.
+    change <{ λ {map (option_map Some) e} }> with <{ ↑(λ e) }>.
+    remember <{ λ e }>. cbn. rewrite bind_lift. rewrite lambda_match_just_some. rewrite <- lift_bind.
+    subst.
+    apply sim_beta; try rewrite bindV_is_bind; try rewrite bindV_is_bind'...
+    cbn.
+    apply IHsim_tm3. intros [a|]; cbn... apply sim_map...
+  - cbn. apply sim_let_new...
+  - constructor... rewrite bindV_is_bind; rewrite bindV_is_bind'...
+  - apply sim_K_cons...
+  - apply sim_K_let... apply IHsim_tm; intros [a|]; cbn; auto.
+Qed.
 Global Hint Resolve sim_bind : core.
 
 Lemma sim_subst_lemma : ∀ e' e v' (v : val ␀),
