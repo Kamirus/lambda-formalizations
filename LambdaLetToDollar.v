@@ -306,6 +306,22 @@ Proof with auto.
     constructor...
 Qed.
 
+Lemma plug_t_compose : ∀ {A} {t1' : T' A} {t1 t2' t2},
+  t1' ~ₜ t1 →
+  t2' ~ₜ t2 →
+  ∃ t' t,
+    t' ~ₜ t /\
+    (∀ e', <| t1' [t2' [e']] |> = <| t' [e'] |>) /\
+    (∀ e , <{ t1  [t2  [e ]] }> = <{ t  [e ] }>).
+Proof with auto.
+  induction t1'; intros t1 t2' t2 Ht1 Ht2; inversion Ht1; clear Ht1; subst; cbn.
+  - repeat eexists...
+  - destruct (IHt1' _ _ _ H5 Ht2) as [t0' [t0 [Ht0 [Hsub1 Hsub2]]]].
+    exists (T_cons' v k t0'), (T_cons v0 k0 t0); repeat split; auto; intros; cbn;
+    try rewrite Hsub1;
+    try rewrite Hsub2... 
+Qed.
+
 Lemma sim_plug_j_inv : ∀ {A} (j' : J' A) e' term,
   <| j' [e'] |> ~ₑ term →
   ∃ j e,
@@ -686,16 +702,18 @@ Lemma sim_plug_t' : ∀ t' t e' e,
   t' ~ₜ t →
   e' ~' e →
   <| t'[e'] |> ~' <{ t[e] }>.
-Admitted.
-(* Proof with auto.
-  intros. inversion H0; clear H0; subst.
-  - destruct (t_inv_inner t' t H) as [[Hsub1 Hsub2]|[t2' [t2 [w' [w [k2' [k2 [Ht [Hw [Hk [Hsub1 Hsub2]]]]]]]]]]]; subst; cbn in *; auto.
-    rewrite Hsub1 in *.
-    rewrite Hsub2 in *.
-    clear Hsub1 Hsub2.
-    destruct (plug_k_compose Hk H1) as [k3' [k3 [Hk3 [Hsub1 Hsub2]]]]. rewrite Hsub1. rewrite Hsub2.
-    (* plug_k_compose *)
-Qed. *)
+Proof with auto.
+  intros. inversion H0; clear H0; subst;
+  destruct (t_inv_inner t' t H) as [[Hsub1 Hsub2]|[t2' [t2 [w' [w [k2' [k2 [Ht [Hw [Hk [Hsub1 Hsub2]]]]]]]]]]]; subst; cbn in *; auto;
+  rewrite Hsub1 in *;
+  rewrite Hsub2 in *;
+  clear Hsub1 Hsub2;
+  destruct (plug_k_compose Hk H1) as [k3' [k3 [Hk3 [Hsub1 Hsub2]]]]; rewrite Hsub1; rewrite Hsub2; clear Hsub1 Hsub2;
+  destruct (plug_t_compose Ht (sim_T_cons _ _ _ _ _ _ Hw Hk3 sim_T_nil)) as [t3' [t3 [Ht3 [Hsub1 Hsub2]]]]; cbn in *; rewrite Hsub1; rewrite Hsub2; clear Hsub1 Hsub2;
+  destruct (plug_t_compose Ht3 H2) as [t4' [t4 [Ht4 [Hsub1 Hsub2]]]]; cbn in *; rewrite Hsub1; rewrite Hsub2; clear Hsub1 Hsub2.
+  - apply (sim_assoc' K_nil' K_nil)...
+  - apply (sim_assoc_let' K_nil' K_nil)...
+Qed.
 
 Lemma let_step_to_dollar_multi_aux : ∀ e1' e2' e1,
   e1' -->' e2' →
@@ -953,3 +971,4 @@ Proof.
   - apply (multi_trans Hmulti1 Hmulti2).
   - assumption.
 Qed.
+(* Print Assumptions let_multi_to_dollar_multi. *)

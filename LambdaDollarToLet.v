@@ -605,3 +605,4 @@ Proof.
   - apply (multi_trans Hmulti1 Hmulti2).
   - assumption.
 Qed.
+(* Print Assumptions dollar_multi_to_let_multi. *)
