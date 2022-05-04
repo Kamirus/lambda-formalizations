@@ -2,11 +2,8 @@ Require Export Common.
 Require Export LambdaDollar.
 Require Export LambdaLetDollar.
 
-Inductive sim_J_F {A} (R : tm A → tm' A → Prop) : J A → J' A → Prop :=
-| sim_J_fun : ∀ (e : tm  A) (e' : tm'  A), R e e' → sim_J_F R (J_fun e) (J_fun' e')
-| sim_J_arg : ∀ (v : val A) (v' : val' A), R v v' → sim_J_F R (J_arg v) (J_arg' v')
-| sim_J_dol : ∀ (e : tm  A) (e' : tm'  A), R e e' → sim_J_F R (J_dol e) (J_dol' e')
-.
+(* ANCHOR Similarity Relation
+ *)
 Reserved Notation "e ~ₑ e'" (at level 40).
 Reserved Notation "v ~ᵥ v'" (at level 40).
 Reserved Notation "p ~ₚ p'" (at level 40).
@@ -19,24 +16,29 @@ Inductive sim_tm {A} : tm A → tm' A → Prop :=
 | sim_s_0  : ∀ e e', e ~ₑ e' → <{ S₀ e }> ~ₑ <| S₀, e' |>
 | sim_app  : ∀ e1 e2 e1' e2', e1 ~ₑ e1' → e2 ~ₑ e2' → <{ e1   e2 }> ~ₑ <| e1'   e2' |>
 | sim_dol  : ∀ e1 e2 e1' e2', e1 ~ₑ e1' → e2 ~ₑ e2' → <{ e1 $ e2 }> ~ₑ <| e1' $ e2' |>
-| sim_eta  : ∀ (v : val A) (v' : val' A),
-    v ~ₑ v' → <{ λ {liftV v} $ 0 }> ~ₑ v'
-| sim_eta_dol : ∀ (v1 v2 : val A) (v1' v2' : val' A),
-    v1 ~ₑ v1' → v2 ~ₑ v2' → <{ v1 $ v2 }> ~ₑ <| v1' v2' |>
+| sim_eta  : ∀ (v : val A) (v' : val' A), v ~ₑ v' →
+    <{ λ {liftV v} $ 0 }> ~ₑ v'
+| sim_eta_dol : ∀ (v1 v2 : val A) (v1' v2' : val' A), v1 ~ₑ v1' → v2 ~ₑ v2' →
+    <{ v1 $ v2 }> ~ₑ <| v1' v2' |>
+(* <{ j[e] }> ~ₑ <| let e' in ↑j'[0] |> *)
 | sim_let_fun : ∀ e1 e2 e1' e2',
     e1 ~ₑ e1' → e2 ~ₑ e2' → <{ e1   e2 }> ~ₑ <| let e1' in (0   ↑e2') |>
 | sim_let_arg : ∀ (v1 : val A) e2 (v1' : val' A) e2',
     v1 ~ₑ v1' → e2 ~ₑ e2' → <{ v1   e2 }> ~ₑ <| let e2' in ({liftV' v1'}  0 ) |>
 | sim_let_dol : ∀ e1 e2 e1' e2',
     e1 ~ₑ e1' → e2 ~ₑ e2' → <{ e1 $ e2 }> ~ₑ <| let e1' in (0 $ ↑e2') |>
-where "e ~ₑ e'" := (sim_tm  e e')
-and   "j ~ⱼ j'" := (sim_J_F sim_tm j j').
+where "e ~ₑ e'" := (sim_tm  e e').
 Inductive sim_val {A} : val A → val' A → Prop :=
 | sim_val_abs : ∀ v v', val_to_tm v ~ₑ val_to_tm' v' → v ~ᵥ v'
 where "v ~ᵥ v'" := (sim_val v v').
 Inductive sim_non {A} : non A → non' A → Prop :=
 | sim_non_ : ∀ p p', non_to_tm p ~ₑ non_to_tm' p' → p ~ₚ p'
 where "p ~ₚ p'" := (sim_non p p').
+Inductive sim_J {A} : J A → J' A → Prop :=
+| sim_J_fun : ∀ (e : tm  A) (e' : tm'  A), e ~ₑ e' → J_fun e ~ⱼ J_fun' e'
+| sim_J_arg : ∀ (v : val A) (v' : val' A), v ~ₑ v' → J_arg v ~ⱼ J_arg' v'
+| sim_J_dol : ∀ (e : tm  A) (e' : tm'  A), e ~ₑ e' → J_dol e ~ⱼ J_dol' e'
+where "j ~ⱼ j'" := (sim_J j j').
 Inductive sim_K {A} : K A → K' A → Prop :=
 | sim_K_nil  :
     K_nil ~ₖ K_nil'
@@ -54,7 +56,7 @@ Inductive sim_T {A} : T A → T' A → Prop :=
     t ~ₜ t' →
     T_cons v k t ~ₜ T_cons' v' k' t'
 where "t ~ₜ t'" := (sim_T t t').
-Global Hint Constructors sim_J_F : core.
+Global Hint Constructors sim_J : core.
 Global Hint Constructors sim_K : core.
 Global Hint Constructors sim_T : core.
 Global Hint Constructors sim_val : core.

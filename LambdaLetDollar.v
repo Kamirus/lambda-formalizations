@@ -1,6 +1,8 @@
 Require Export Common.
 Require Export Coq.Logic.FunctionalExtensionality.
 
+(* ANCHOR Terms
+ *)
 Inductive tm' {A} :=
 | tm_var' : A → tm'
 | tm_s_0' : tm' (* S₀ *)
@@ -297,6 +299,8 @@ Ltac reason := repeat(
   end).
 
 
+(* ANCHOR Contexts
+ *)
 Section Contexts.
   Context {A : Type}.
   Inductive J' :=
@@ -371,7 +375,8 @@ Definition redex_to_term' {A} (r : redex' A) :=
   end.
 Coercion redex_to_term' : redex' >-> tm'.
 
-
+(* ANCHOR Decompose
+ *)
 Fixpoint decompose' (e : tm' ␀) : dec' ␀ :=
   match e with
   | <| var a |> => from_void a
@@ -443,21 +448,9 @@ Proof.
   destruct v0; inversion H1.
 Qed.
 
-(* Lemma inj_redex : ∀ {A} (r r' : redex' A),
-  redex_to_term' r = redex_to_term' r' -> r = r'.
-Proof.
-  intros; destruct r, r';
-  repeat match goal with
-  | v : val ?A |- _ => destruct v; cbn in *
-  | j : J ?A |- _ => destruct j; cbn in *
-  | H: non_to_tm' _ = non_to_tm' _ |- _ => apply inj_non in H; subst
-  | H: _ = _ |- _ => inv H
-  end; auto.
 
-  destruct n0; cbn in *; inv x.
-  destruct n; cbn in *; inv x.
-Qed. *)
-
+(* ANCHOR Unique Decomposition
+ *)
 (* plug' ∘ decompose' = id *)
 Lemma decompose_value_inversion' : ∀ e v,
   decompose' e = dec_value' v → e = val_to_tm' v.
@@ -642,6 +635,9 @@ Proof.
   change ((map' g ∘ f) a) with (map' g (f a)); repeat rewrite map_map_law'; f_equal.
 Qed.
 
+
+(* ANCHOR Evaluation
+ *)
 Definition contract' (r : redex' ␀) : tm' ␀ :=
   match r with
   (* (λ x. e) v  ~>  e [x := v] *)
@@ -1101,6 +1097,8 @@ Proof.
 Qed.
 
 
+(* ANCHOR Context Capture
+ *)
 Theorem plug_k_let_bubbles_up_s_0 : ∀ (k : K' ␀) e1 e2,
   <| k [let S₀, e1 in e2] |> -->'* <| let S₀, e1 in ↑k[e2] |>.
 Proof.

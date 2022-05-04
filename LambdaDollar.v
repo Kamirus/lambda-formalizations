@@ -1,5 +1,7 @@
 Require Export Common.
 
+(* ANCHOR Terms
+ *)
 Inductive tm {A} :=
 | tm_var : A → tm
 | tm_abs : @tm ^A → tm (* λ  x. e *)
@@ -210,6 +212,8 @@ Notation "E [ e ]" := (plug E e)
     e custom λ_dollar_scope at level 99).
 
 
+(* ANCHOR Contexts
+ *)
 Section Contexts.
   Context {A : Type}.
   Inductive J :=
@@ -255,7 +259,6 @@ Instance PlugJ : Plug J := @plugJ.
 Fixpoint plugK {A} (k : K A) e :=
   match k with
   | K_nil => e
-  (* | K_cons j k' => plugK k' (plugJ j e) *)
   | K_cons j k' => plugJ j (plugK k' e)
   end.
 Instance PlugK : Plug K := @plugK.
@@ -263,7 +266,6 @@ Instance PlugK : Plug K := @plugK.
 Fixpoint plugT {A} (trail : T A) e :=
   match trail with
   | T_nil => e
-  (* | T_cons v k t => plugT t <{ {val_to_tm v} $ {plugK k e} }> *)
   | T_cons v k t => <{ v $ k [{plugT t e}] }>
   end.
 Instance PlugT : Plug T := @plugT.
@@ -279,10 +281,9 @@ Coercion redex_to_term : redex >-> tm.
 Definition K_fun {A} k e := @K_cons A (J_fun e) k.
 Definition K_arg {A} v k := @K_cons A (J_arg v) k.
 Definition K_dol {A} k e := @K_cons A (J_dol e) k.
-(* Notation "'K_fun' k e" := (K_cons (J_fun e) k) (at level 10, left associativity). *)
-(* Notation "'K_arg' v k" := (K_cons (J_arg v) k) (at level 10, left associativity). *)
-(* Notation "'K_dol' k e" := (K_cons (J_dol e) k) (at level 10, left associativity). *)
 
+(* ANCHOR Decompose
+ *)
 Fixpoint decompose (e : tm ␀) : dec ␀ :=
   match e with
   | <{ var a }> => from_void a
@@ -317,8 +318,11 @@ Ltac inv_decompose_match H :=
   | H : (match decompose ?e with | dec_stuck _ _ | dec_redex _ _ _ | dec_value _ => _ end = _) |- _
     => let d := fresh "d" in remember (decompose e) as d; inv d; inv_decompose_match H
   | _ => try solve [inversion H; auto]; inj H
-  end.
+  end
+.
 
+(* ANCHOR Unique Decomposition
+ *)
 (* plug ∘ decompose = id *)
 Lemma decompose_value_inversion : ∀ e v,
   decompose e = dec_value v → e = val_to_tm v.
@@ -500,6 +504,8 @@ Proof.
 Qed.
 
 
+(* ANCHOR Evaluation
+ *)
 Definition contract (r : redex ␀) : tm ␀ :=
   match r with
   (* (λ x. e) v  ~>  e [x := v] *)
