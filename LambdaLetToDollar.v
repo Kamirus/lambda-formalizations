@@ -173,6 +173,29 @@ Proof with auto.
       constructor. cbn. assumption.
 Qed.
 
+Lemma sim_val_inv' : ∀ (v' : val' ␀) (e : tm ␀),
+  ~ v' ~' e.
+Proof.
+  intros. intro. inversion H; clear H; subst;
+  destruct k0'; cbn in *;
+  try (destruct t0'; cbn in *);
+  destruct v'; inversion H0.
+Qed.
+
+Lemma sim_val_inv'' : ∀ (v' : val' ␀) (e : tm ␀),
+  v' ~ e → ∃ (v : val ␀), e = v /\ v' ~ᵥ v.
+Proof.
+  intros. inversion H; clear H; subst.
+  - apply sim_val_inv in H0 as [v [Hsub Hsim]]; subst; eauto.
+  - apply sim_val_inv' in H0. contradiction.
+  - destruct k0'; cbn in *;
+    try (destruct t0'; cbn in *);
+    destruct v'; inversion H0.
+  - destruct k0'; cbn in *;
+    try (destruct t0'; cbn in *);
+    destruct v'; inversion H0.
+Qed.
+
 Ltac reason := repeat(
   match goal with
   | H : val_to_tm' _ ~ₑ _ |- _ =>
@@ -180,6 +203,11 @@ Ltac reason := repeat(
       let Hev := fresh "Hev" in
       let Hv := fresh "Hv" in
       apply sim_val_inv in H as [v [Hev Hv]]; subst
+  | H : val_to_tm' _ ~ _ |- _ =>
+      let v := fresh "v" in
+      let Hev := fresh "Hev" in
+      let Hv := fresh "Hv" in
+      apply sim_val_inv'' in H as [v [Hev Hv]]; subst
   | H : val_to_tm' ?v1 = val_to_tm' ?v2 |- _ => apply inj_val' in H
   | H : val_to_tm  ?v1 = val_to_tm  ?v2 |- _ => apply inj_val  in H
   end).
@@ -970,3 +998,13 @@ Proof.
   - assumption.
 Qed.
 (* Print Assumptions let_multi_to_dollar_multi. *)
+
+Theorem let_multi_to_dollar_multi_val : ∀ e' (v' : val' ␀) e,
+  e' -->'* v' →
+  e' ~ e →
+  ∃ (v : val ␀), e -->* v /\ v' ~ᵥ v.
+Proof.
+  intros e' v' e Hmulti Hsim.
+  destruct (let_multi_to_dollar_multi e' v' e Hmulti Hsim) as [v [Hmulti' Hsim']].
+  reason; eauto.
+Qed.

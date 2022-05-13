@@ -607,3 +607,13 @@ Proof.
   - assumption.
 Qed.
 (* Print Assumptions dollar_multi_to_let_multi. *)
+
+Theorem dollar_multi_to_let_multi_val : ∀ e (v : val ␀) e',
+  e -->* v →
+  e ~ₑ e' →
+  ∃ (v' : val' ␀), e' -->'* v' /\ v ~ᵥ v'.
+Proof.
+  intros e v e' Hmulti Hsim.
+  destruct (dollar_multi_to_let_multi e v e' Hmulti Hsim) as [v' [Hmulti' Hsim']].
+  reason; eauto.
+Qed.
