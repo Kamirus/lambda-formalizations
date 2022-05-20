@@ -1138,7 +1138,7 @@ Qed.
 
 (* ANCHOR Context Capture
  *)
-Theorem plug_k_let_bubbles_up_s_0 : ∀ (k : K' ␀) e1 e2,
+Theorem plug_k_let_reassoc_s_0 : ∀ (k : K' ␀) e1 e2,
   <| k [let S₀, e1 in e2] |> -->'* <| let S₀, e1 in ↑k[e2] |>.
 Proof.
   induction k; intros; cbn; auto.
@@ -1146,7 +1146,7 @@ Proof.
   rewrite lambda_to_val'. apply multi_contr'. apply contr_let_assoc'.
 Qed.
 
-Theorem plug_k_let_bubbles_up_s_0' : ∀ (k : K' ␀) (v : val' ␀) e,
+Theorem plug_k_let_reassoc_s_0' : ∀ (k : K' ␀) (v : val' ␀) e,
   <| k [let S₀ v in e] |> -->'* <| let S₀ v in ↑k[e] |>.
 Proof.
   induction k; intros; cbn; auto.
@@ -1233,7 +1233,7 @@ Lemma plug_shift_step_inv' : ∀ (k0 : K' ␀) (t0 : T' ␀) (w : val' ␀) (k :
   <| w $ k [let S₀ v in e] |> -->' inner.
 Proof.
   intros.
-  remember (plug_k_let_bubbles_up_s_0' k v e) as Hinner eqn:HH. clear HH.
+  remember (plug_k_let_reassoc_s_0' k v e) as Hinner eqn:HH. clear HH.
   apply (@multi_delim' w) in Hinner.
   inversion Hinner; clear Hinner; subst. 
   - rewrite H2 in *.
@@ -1251,7 +1251,7 @@ Lemma shift_step_inv' : ∀ (w : val' ␀) (k : K' ␀) (v : val' ␀) e term,
   (∃ inner, <| k [let S₀ v in e] |> -->' inner /\ term = <| w $ inner |>).
 Proof.
   intros.
-  remember (plug_k_let_bubbles_up_s_0' k v e) as Hinner eqn:HH. clear HH.
+  remember (plug_k_let_reassoc_s_0' k v e) as Hinner eqn:HH. clear HH.
   inversion Hinner; clear Hinner; subst.
   - left. rewrite H2 in *.
     destruct k.

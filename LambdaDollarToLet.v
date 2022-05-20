@@ -579,7 +579,7 @@ Proof with auto.
         apply (multi_trans Hmulti').
         eapply multi_trans.
         eapply multi_delim'.
-        apply (plug_k_let_bubbles_up_s_0 _ _ _).
+        apply (plug_k_let_reassoc_s_0 _ _ _).
         eapply multi_contr_multi'. rewrite lambda_to_val'. apply contr_dol_let'.
         eapply multi_contr_multi'. rewrite lambda_to_val'. apply contr_shift'.
         apply multi_contr'. apply contr_beta'. 
