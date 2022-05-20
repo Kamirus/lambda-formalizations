@@ -13,6 +13,6 @@
   - [`λc$` calculus: a Fine-Grained version of `λ$`](LambdaLetDollar.v) (paper reference: [Figure 1](https://dl.acm.org/doi/10.1145/3479394.3479399))
   - Correspondence between `λ$` and `λc$`:
     - [Simulation: `λ$` to `λc$`](LambdaDollarToLet.v)
-    - [Simulation: `λc$` to `λ$`](LambdaLetDollar.v)
+    - [Simulation: `λc$` to `λ$`](LambdaLetToDollar.v)
 
 Create Makefile with `coq_makefile -f _CoqProject *.v -o Makefile`
