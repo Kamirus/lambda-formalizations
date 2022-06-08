@@ -1,7 +1,75 @@
 Require Export Common.
 Require Export Coq.Logic.FunctionalExtensionality.
 
+(* ANCHOR λc$
+
+  terms                 e ::= v | p
+  values                v ::= x | λ x. e | S₀
+  nonvalues             p ::= e e' | let x = e in e' | e $ e'
+  elementary contexts   J ::= [] e | v [] | [] $ e
+  evaluation contexts   K ::= [] | let x = K in e
+  trails                T ::= [] | v $ K[T]
+
+  (β.v)     (λ x. e) v                          ~>  e [x := v]
+  ($.v)     v $ v'                              ~>  v v'
+  (β.$)     v $ S₀ w                            ~>  w v
+  ($.let)   v $ let x = S₀ w in e               ~>  (λ x. v $ e) $ S₀ w
+  (name)    J[p]                                ~>  let x = p in J[x]
+  (β.let)   let x = v in e                      ~>  e [x := v]
+  (assoc)   let x = (let y = S₀ w in e2) in e3  ~>  let y = S₀ w in let x = e2 in e3
+
+      e    ~>     e'
+  -------------------- (eval)
+  K[T[e]] --> K[T[e']]
+
+  The `λc$` calculus is a fine-grained version of the `λ$` calculus, meaning:
+  - instead of capturing the context in a one big step as in the rule `v $ K [S₀ f. e]  ~>  e [f := λ x. v $ K[x]]`
+  - we capture it by:
+    - First, building the context-as-term with many small steps - namely using rules: (name) and (assoc)
+    - Second, finally capturing the context with the (β.$) rule which is the original `λ$` rule without the evaluation context `K`
+  
+  The formalization of the `λc$` is designed to perfectly match the calculus introduced in the paper,
+  which also specified the reduction theory but left out the evaluation strategy.
+  The goal of this project was to define the evaluation strategy using only the rules from the reduction theory.
+
+  The chosen set of rules is a specialized subset of original ones.
+  - ($.let) and (assoc) are specialized to work only with `S₀ w` instead of any term as in the original presentation
+  - excluded every η-reduction rule, as expected when working with an evaluation
+
+  This evaluation strategy is probably not the only possible solution.
+  There's the alternative hybrid strategy that abandons the (assoc) rule entirely at the expense that the reduction behaves differently under the delimiter `$`.
+  The hybrid strategy is yet to be explored, so for now let us focus on the pros and cons of the strategy described here.
+
+  SECTION Pros
+  - The contraction rules together with the formation of the evaluation context are enough to describe the strategy, which is a standard homogeneous format - easy to understand
+    (whereas the alternative requires special context forms together with different set sof rules that act on these contexts)
+  - Trivial to support the `control0` operator
+
+  SECTION Cons
+  - The need to specialize original rules with `S₀ w`
+  - The specialized rule ($.let) always produces a redex
+  - (name) rule *existing*
+
+ *)
+
 (* ANCHOR Terms
+  FORMALIZATION: TERM REPRESENTATION
+  To represent terms in Coq one must pick a method of encoding variables.
+
+  The simplest solution would be to represent variables as strings, which is the most readable format.
+  Unfortunately this approach makes alpha-equivalent terms distinct which forces us to use equivalence relation, instead of Coq equality, making the whole process more complicated.
+  Moreover it lacks any form of controlling free variables, which is problematic when working with closed terms (and working with evaluation means dealing with closed terms almost exclusively).
+
+  The use of de Bruijn indices for encoding variables resolves the alpha-equivalence issue, but still gives no way of controlling free variables.
+
+  A solution to both issues is the format called nested-datatypes, which asserts that in a term of type `tm A` the only free variables are of type `A`.
+  The idea of de Bruijn indices is also utilized to represent bound variables.
+  Consider the lambda constructor of type `tm_abs : tm (option A) → tm A`, notice that the body of the lambda is of type `tm (option A)`
+  and therefore its free variables are either `None`, meaning a variable occurrence bound by the lambda, or `Some a` where `a` is a free variable of type `A`
+
+  In this format is trivial to assert that the term is closed as it's just a matter of plugging an uninhabited type for `A`.
+
+  TODO: this format usually requires generalizing your definitions/theorems and using abstract operations like Functor's map, or Monad's bind
  *)
 Inductive tm' {A} :=
 | tm_var' : A → tm'

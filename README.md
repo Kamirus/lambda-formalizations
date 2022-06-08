@@ -16,3 +16,11 @@
     - [Simulation: `λc$` to `λ$`](LambdaLetToDollar.v)
 
 Create Makefile with `coq_makefile -f _CoqProject *.v -o Makefile`
+
+
+## Future Work
+- Examine the potential of supporting the `control0` operator for the current evaluation strategy
+- Develop the alternative evaluation strategy - the hybrid (reduces differently when under the delimiter) one that aggressively duplicates `$`
+  - Simplify both calculi to the most common format to showcase the fine-grained difference - single term-tree `tm A`, two different reductions
+  - Remove call-by-value nature from both, let let-bindings do the rest
+  - Explore a different similarity relation strategy - instead of substituting similar terms try to work on common skeletons (`tm A`) with a substitution (`A → val`) of similar values

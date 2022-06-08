@@ -9,11 +9,19 @@ Require Export Common.
   evaluation contexts   K ::= [] | J[K]
   trails                T ::= [] | v $ K[T]
 
+  (β.v)   (λ x. e) v      ~>  e [x := v]
+  ($.v)   v1 $ v2         ~>  v1 v2
+  ($.K)   v $ K[S₀ f. e]  ~>  e [f := λ x. v $ K[x]]
+
+      e    ~>     e'
+  -------------------- (eval)
+  K[T[e]] --> K[T[e']]
+
   The `λ$` calculus is an extension of the call-by-value lambda calculus with two control operators: dollar ($) and shift0 (S₀).
-  - The former is a generalization of the control delimiter reset0 (<>) which not only delimits context but also specifies the continuation for the term under the delimiter.
+  - The former operator is a generalization of the control delimiter reset0 (<>) which not only delimits context but also specifies the continuation for the term under the delimiter.
     Intuitively the expression `e1 $ e2` means 'evaluate e1, then run e2 with the result of evaluating e1 pushed on the context stack'.
   - While the latter operator, shift0, captures delimited contexts.
-    As it was originally presented (in the paper that introduced the `λ$` calculus), the `S₀` operator can only appear as a binder `S₀ f. e`,
+    The presentation that originally introduced the `λ$` calculus allows the `S₀` operator to appear only as a binder `S₀ f. e`,
     which can be thought of as an application of shift0 to a λ-abstraction `S₀ (λ f. e)`.
     Intuitively the S₀-abstraction captures the evaluation context together with the most recently pushed delimited context, reifying it as lambda to substitute it for the variable `f` and continuing with the body `e`.
 
@@ -22,23 +30,6 @@ Require Export Common.
  *)
 
 (* ANCHOR Terms
-  FORMALIZATION: TERM REPRESENTATION
-  To represent terms in Coq one must pick a method of encoding variables.
-
-  The simplest solution would be to represent variables as strings, which is the most readable format.
-  Unfortunately this approach makes alpha-equivalent terms distinct which forces us to use equivalence relation, instead of Coq equality, making the whole process more complicated.
-  Moreover it lacks any form of controlling free variables, which is problematic when working with closed terms (and working with evaluation means dealing with closed terms almost exclusively).
-
-  The use of de Bruijn indices for encoding variables resolves the alpha-equivalence issue, but still gives no way of controlling free variables.
-
-  A solution to both issues is the format called nested-datatypes, which asserts that in a term of type `tm A` the only free variables are of type `A`.
-  The idea of de Bruijn indices is also utilized to represent bound variables.
-  Consider the lambda constructor of type `tm_abs : tm (option A) → tm A`, notice that the body of the lambda is of type `tm (option A)`
-  and therefore its free variables are either `None`, meaning a variable occurrence bound by the lambda, or `Some a` where `a` is a free variable of type `A`
-
-  In this format is trivial to assert that the term is closed as it's just a matter of plugging an uninhabited type for `A`.
-
-  TODO: this format usually requires generalizing your definitions/theorems and using abstract operations like Functor's map, or Monad's bind
  *)
 Inductive tm {A} :=
 | tm_var : A → tm
