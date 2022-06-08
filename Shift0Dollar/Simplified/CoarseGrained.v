@@ -3,8 +3,9 @@ Require Export Shift0Dollar.Simplified.Terms.
 Inductive redex {A} :=
 | redex_beta     : tm ^A → val A → redex (* (λ e) v *)
 | redex_dollar   : val A → val A → redex (* v v' *)
-| redex_shift    : val A → K A → val A → redex (* w $ K[S₀ v] *)
 | redex_let_beta : val A → tm ^A → redex (* let x = v in e *)
+
+| redex_shift    : val A → K A → val A → redex (* w $ K[S₀ v] *)
 .
 Arguments redex A : clear implicits.
 
@@ -12,8 +13,8 @@ Definition redex_to_term {A} (r : redex A) : tm A :=
   match r with
   | redex_beta   e v => <{ (λ e) v }>
   | redex_dollar v v' => <{ v $ v' }>
-  | redex_shift w k v => <{ w $ k [S₀ v] }>
   | redex_let_beta v e => <{ let v in e }>
+  | redex_shift w k v => <{ w $ k [S₀ v] }>
   end.
 Coercion redex_to_term : redex >-> tm.
 
@@ -62,12 +63,12 @@ Definition contract (r : redex ␀) : tm ␀ :=
   
     (* w $ v  ~>  w v *)
     | redex_dollar v1 v2 => <{ v1 v2 }>
+    
+    (* let x = v in e  ~>  e [x := v] *)
+    | redex_let_beta v e => <{ e [0 := v] }>
   
     (* w $ K[S₀ v]  ~>  v (λ x. w $ K[x]) *)
     | redex_shift w k v  => <{ v (λ ↑w $ ↑k[0]) }>
-  
-    (* let x = v in e  ~>  e [x := v] *)
-    | redex_let_beta v e => <{ e [0 := v] }>
     end.
 
 Definition optional_step e :=
@@ -113,12 +114,9 @@ Proof.
 Qed.
 Definition contr_beta : ∀ e (v : val ␀), <{ (λ e) v }> ~> <{ e [ 0 := v ] }> := λ e v, contr_tm (redex_beta e v).
 Definition contr_dollar : ∀ (v1 v2 : val ␀), <{ v1 $ v2 }> ~> <{ v1 v2 }> := λ v1 v2, contr_tm (redex_dollar v1 v2).
-Definition contr_shift : ∀ (w : val ␀) (k : K ␀) (v : val ␀), <{ w $ k [S₀ v] }> ~> <{ v (λ ↑w $ ↑k[0]) }> := λ w k v, contr_tm (redex_shift w k v).
-(* Definition contr_dol_let : ∀ (v v1 : val ␀) e2, <{ v $ let S₀ v1 in e2 }> ~> <{ (λ {liftV v} $ e2) $ S₀ v1 }> := λ v v1 e2, contr_tm (redex_dol_let v v1 e2). *)
-(* Definition contr_let : ∀ (j : J ␀) (p : non ␀), <{ j[p] }> ~> <{ let p in ↑j[0] }> := λ j p, contr_tm (redex_let j p). *)
 Definition contr_let_beta : ∀ (v : val ␀) e, <{ let v in e }> ~> <{ e [ 0 := v ] }> := λ v e, contr_tm (redex_let_beta v e).
+Definition contr_shift : ∀ (w : val ␀) (k : K ␀) (v : val ␀), <{ w $ k [S₀ v] }> ~> <{ v (λ ↑w $ ↑k[0]) }> := λ w k v, contr_tm (redex_shift w k v).
 Global Hint Resolve step_contr contr_beta contr_dollar contr_shift contr_let_beta : core.
-(* Global Hint Resolve step_contr contr_beta contr_dollar contr_shift contr_dol_let contr_let contr_let_beta contr_let_assoc : core. *)
 
 Lemma deterministic_contr : ∀ e e1 e2,
   e ~> e1 →
