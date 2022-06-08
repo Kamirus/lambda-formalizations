@@ -1,3 +1,4 @@
 -R . Top
 Shift0Dollar/Simplified/Terms.v
 Shift0Dollar/Simplified/CoarseGrained.v
+Shift0Dollar/Simplified/FineGrained.v

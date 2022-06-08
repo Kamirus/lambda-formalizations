@@ -302,26 +302,16 @@ Section Contexts.
   | T_nil  : T
   | T_cons : val A → K → T → T  (* (v$K) · T *)
   .
-
-  (* Inductive redex :=
-  | redex_beta      : tm ^A → val A → redex  (* (λ e) v *)
-  | redex_dollar    : val A → val A → redex  (* v $ v *)
-  | redex_shift     : val A → val A → redex  (* v $ S₀ v *)
-  | redex_dol_let   : val A → val A → tm ^A → redex (* v $ let x = S₀ v1 in e2 *)
-  | redex_let       : J     → non A → redex  (* J[p] *)
-  | redex_let_beta  : val A → tm ^A → redex  (* let x = v in e *)
-  | redex_let_assoc : val A → tm ^A → tm ^A → redex (* let x = (let y = S₀ v1 in e2) in e3 *)
-  .
-
-  Inductive dec :=
-  | dec_value : val A → dec
-  | dec_stuck_s_0 : val A → dec (* S₀ v *)
-  | dec_stuck_let : val A → tm ^A → dec (* let x = S₀ v in e *)
-  | dec_redex : K → T → redex → dec (* K[T[Redex]] *)
-  . *)
 End Contexts.
 Arguments K A : clear implicits.
 Arguments T A : clear implicits.
+
+Inductive dec {R A} :=
+| dec_value : val A → dec
+| dec_stuck : K A → val A → dec (* K [S₀ v] *)
+| dec_redex : K A → T A → R A → dec (* K [T [Redex]] *)
+.
+Arguments dec R A : clear implicits.
 
 Fixpoint plugK {A} (k : K A) e :=
   match k with

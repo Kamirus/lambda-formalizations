@@ -8,13 +8,6 @@ Inductive redex {A} :=
 .
 Arguments redex A : clear implicits.
 
-Inductive dec {A} :=
-| dec_value : val A → dec
-| dec_stuck : K A → val A → dec (* K [S₀ v] *)
-| dec_redex : K A → T A → redex A → dec (* K [T [Redex]] *)
-.
-Arguments dec A : clear implicits.
-
 Definition redex_to_term {A} (r : redex A) : tm A := 
   match r with
   | redex_beta   e v => <{ (λ e) v }>
@@ -32,12 +25,12 @@ Admitted.
 
 (* ANCHOR Decompose
  *)
- Fixpoint decompose (e : tm ␀) : dec ␀ :=
+ Fixpoint decompose (e : tm ␀) : dec redex ␀ :=
     match e with
     | tm_val v => dec_value v
     | tm_non p => decomposeP p
     end
-  with decomposeP (p : non ␀) : dec ␀ :=
+  with decomposeP (p : non ␀) : dec redex ␀ :=
     match p with
     | <{ v v' }> =>
       match v with
