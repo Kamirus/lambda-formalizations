@@ -291,27 +291,11 @@ Notation "E [ e ]" := (plug E e)
 
 (* ANCHOR Contexts
  *)
-Section Contexts.
-  Context {A : Type}.
-  Inductive K :=
-  | K_nil  : K
-  | K_let  : K → tm ^A → K (* let x = K in e *)
-  .
-
-  Inductive T :=
-  | T_nil  : T
-  | T_cons : val A → K → T → T  (* (v$K) · T *)
-  .
-End Contexts.
-Arguments K A : clear implicits.
-Arguments T A : clear implicits.
-
-Inductive dec {R A} :=
-| dec_value : val A → dec
-| dec_stuck : K A → val A → dec (* K [S₀ v] *)
-| dec_redex : K A → T A → R A → dec (* K [T [Redex]] *)
+Inductive K {A} :=
+| K_nil  : K
+| K_let  : K → tm ^A → K (* let x = K in e *)
 .
-Arguments dec R A : clear implicits.
+Arguments K A : clear implicits.
 
 Fixpoint plugK {A} (k : K A) e :=
   match k with
@@ -320,12 +304,13 @@ Fixpoint plugK {A} (k : K A) e :=
   end.
 Instance PlugK : Plug K := @plugK.
 
-Fixpoint plugT {A} (trail : T A) e :=
-  match trail with
-  | T_nil => e
-  | T_cons v k t => <{ v $ k [{plugT t e}] }>
-  end.
-Instance PlugT : Plug T := @plugT.
+
+Inductive dec {T R A} :=
+| dec_value : val A → dec
+| dec_stuck : K A → val A → dec (* K [S₀ v] *)
+| dec_redex : K A → T A → R A → dec (* K [T [Redex]] *)
+.
+Arguments dec T R A : clear implicits.
 
 (* Definition redex_to_term {A} (r : redex A) := 
   match r with

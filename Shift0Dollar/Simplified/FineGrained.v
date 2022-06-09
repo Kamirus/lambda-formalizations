@@ -1,5 +1,21 @@
 Require Export Shift0Dollar.Simplified.Terms.
 
+(* ANCHOR Contexts
+ *)
+Inductive T' {A} :=
+| T_nil'  : T'
+| T_cons' : val A → T' → T'  (* v $ T' *)
+.
+Arguments T' A : clear implicits.
+ 
+Fixpoint plugT' {A} (trail : T' A) e :=
+  match trail with
+  | T_nil' => e
+  | T_cons' v t => <{ v $ {plugT' t e} }>
+  end.
+Instance PlugT' : Plug T' := @plugT'.
+
+
 Inductive redex' {A} :=
 | redex_beta'     : tm ^A → val A → redex'        (* (λ e) v *)
 | redex_dollar'   : val A → val A → redex'        (* v v' *)
@@ -28,50 +44,43 @@ Admitted.
 
 (* ANCHOR Decompose
  *)
-Fixpoint decomposeW (w : val ␀) (e : tm ␀) : (T ␀ * redex' ␀) :=
+(* Decompose `w $ e` term, which is never stuck and always returns `dec_redex` with an empty context `K` *)
+Fixpoint decompose_delimited (w : val ␀) (e : tm ␀) : (T' ␀ * redex' ␀) :=
   match e with
-  | tm_val v => (T_nil, redex_dollar' w v)  (* w $ v *)
-  | tm_non p => decomposeWP w p
+  | tm_val v => (T_nil', redex_dollar' w v)  (* w $ v *)
+  | tm_non p => decompose_delimitedP w p
   end
-with decomposeWP (w : val ␀) (p : non ␀) : (T ␀ * redex' ␀) :=
+with decompose_delimitedP (w : val ␀) (p : non ␀) : (T' ␀ * redex' ␀) :=
   match p with
   | <{ v v' }> =>
     match v with
     | <{ var a }> => from_void a
-    | <{ S₀ }>    => (               T_nil, redex_shift' w v') (* w $ S₀ v' *)
-    | <{ λ e }>   => (T_cons w K_nil T_nil, redex_beta'  e v') (* w $ (λ e) v' *)
+    | <{ S₀ }>    => (          T_nil', redex_shift' w v')                      (* w $ S₀ v' *)
+    | <{ λ e }>   => (T_cons' w T_nil', redex_beta'  e v')                      (* w $ (λ e) v' *)
     end
-  | <{ w' $ e }> =>
-    let (t, r) := decomposeW w' e
-    in (T_cons w K_nil t, r) (* w $ w' $ e *)
-  | <{ let e in e' }> =>
-    (T_nil, redex_dol_let' w e e') (* w $ let e in e' *)
+  | <{ w' $ e }> => let (t, r) := decompose_delimited w' e in (T_cons' w t, r)  (* w $ w' $ e *)
+  | <{ let e in e' }> => (T_nil', redex_dol_let' w e e')                        (* w $ let e in e' *)
   end.
 
-Fixpoint decompose' (e : tm ␀) : dec redex' ␀ :=
+Fixpoint decompose' (e : tm ␀) : dec T' redex' ␀ :=
   match e with
   | tm_val v => dec_value v
   | tm_non p => decomposeP' p
   end
-with decomposeP' (p : non ␀) : dec redex' ␀ :=
+with decomposeP' (p : non ␀) : dec T' redex' ␀ :=
   match p with
   | <{ v v' }> =>
     match v with
     | <{ var a }> => from_void a
-    | <{ S₀ }>    => dec_stuck K_nil v'
-    | <{ λ e }>   => dec_redex K_nil T_nil (redex_beta' e v')
+    | <{ S₀ }>    => dec_stuck K_nil v'                                         (* S₀ v' *)
+    | <{ λ e }>   => dec_redex K_nil T_nil' (redex_beta' e v')                  (* (λ e) v' *)
     end
-  | <{ w $ e }> =>
-    match decompose' e with
-    | dec_stuck k v   => let (t, r) := decomposeW w e in dec_redex K_nil t r
-    | dec_redex k t r => dec_redex K_nil (T_cons w k t) r          (* w $ k[t[r]] *)
-    | dec_value v     => dec_redex K_nil T_nil (redex_dollar' w v)  (* w $ v *)
-    end
+  | <{ w $ e }> => let (t, r) := decompose_delimited w e in dec_redex K_nil t r (* w $ e *)
   | <{ let e in e' }> =>
     match decompose' e with
-    | dec_stuck k v   => dec_stuck (K_let k e') v (* let k[S₀ v] in e' *)
-    | dec_redex k t r => dec_redex (K_let k e') t r          (* let k[t[r]] in e' *)
-    | dec_value v     => dec_redex K_nil T_nil (redex_let_beta' v e')  (* let v       in e' *)
+    | dec_stuck k v   => dec_stuck (K_let k e') v                               (* let k[S₀ v] in e' *)
+    | dec_redex k t r => dec_redex (K_let k e') t r                             (* let k[t[r]] in e' *)
+    | dec_value v     => dec_redex K_nil T_nil' (redex_let_beta' v e')          (* let v       in e' *)
     end
   end.
 
@@ -91,6 +100,8 @@ Definition contract' (r : redex' ␀) : tm ␀ :=
   
     (* w $ S₀ v  ~>  v w *)
     (* | redex_shift' w v  => <{ v w }> *)
+
+    (* w $ S₀ v  ~>  v (λ x. w $ x) *)
     | redex_shift' w v  => <{ v (λ ↑w $ 0) }>
 
     (* w $ let x = e in e'  ~>  (λ x. w $ e') $ e *)
@@ -111,7 +122,7 @@ Global Hint Constructors contr' : core.
 
 Reserved Notation "e1 -->' e2" (at level 40).
 Inductive step' : tm ␀ → tm ␀ → Prop :=
-| step_tm' : ∀ (k : K ␀) (t : T ␀) (e1 e2 : tm ␀), e1 ~>' e2 → <{ k[t[e1]] }> -->' <{ k[t[e2]] }>
+| step_tm' : ∀ (k : K ␀) (t : T' ␀) (e1 e2 : tm ␀), e1 ~>' e2 → <{ k[t[e1]] }> -->' <{ k[t[e2]] }>
 where "e1 -->' e2" := (step' e1 e2).
 Global Hint Constructors step' : core.
 
@@ -122,7 +133,7 @@ Lemma step_contr' : ∀ {e1 e2},
   e1 -->' e2.
 Proof.
   intros.
-  apply (step_tm' K_nil T_nil e1 e2).
+  apply (step_tm' K_nil T_nil' e1 e2).
   assumption.
 Qed.
 Lemma multi_contr' : ∀ {e1 e2},
@@ -136,7 +147,7 @@ Lemma multi_contr_multi' : ∀ {e1 e2 e3},
   e2 -->'* e3 →
   e1 -->'* e3.
 Proof.
-  intros. eapply multi_step; try eapply (step_tm' K_nil T_nil); cbn; eassumption.
+  intros. eapply multi_step; try eapply (step_tm' K_nil T_nil'); cbn; eassumption.
 Qed.
 Definition contr_beta' : ∀ e (v : val ␀), <{ (λ e) v }> ~>' <{ e [ 0 := v ] }> := λ e v, contr_tm' (redex_beta' e v).
 Definition contr_dollar' : ∀ (v1 v2 : val ␀), <{ v1 $ v2 }> ~>' <{ v1 v2 }> := λ v1 v2, contr_tm' (redex_dollar' v1 v2).

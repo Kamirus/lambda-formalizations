@@ -1,5 +1,21 @@
 Require Export Shift0Dollar.Simplified.Terms.
 
+(* ANCHOR Contexts
+ *)
+Inductive T {A} :=
+| T_nil  : T
+| T_cons : val A → K A → T → T  (* (v$K) · T *)
+.
+Arguments T A : clear implicits.
+
+Fixpoint plugT {A} (trail : T A) e :=
+  match trail with
+  | T_nil => e
+  | T_cons v k t => <{ v $ k [{plugT t e}] }>
+  end.
+Instance PlugT : Plug T := @plugT.
+
+
 Inductive redex {A} :=
 | redex_beta     : tm ^A → val A → redex (* (λ e) v *)
 | redex_dollar   : val A → val A → redex (* v v' *)
@@ -26,12 +42,12 @@ Admitted.
 
 (* ANCHOR Decompose
  *)
- Fixpoint decompose (e : tm ␀) : dec redex ␀ :=
+ Fixpoint decompose (e : tm ␀) : dec T redex ␀ :=
     match e with
     | tm_val v => dec_value v
     | tm_non p => decomposeP p
     end
-  with decomposeP (p : non ␀) : dec redex ␀ :=
+  with decomposeP (p : non ␀) : dec T redex ␀ :=
     match p with
     | <{ v v' }> =>
       match v with
