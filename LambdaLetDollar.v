@@ -53,23 +53,6 @@ Require Export Coq.Logic.FunctionalExtensionality.
  *)
 
 (* ANCHOR Terms
-  FORMALIZATION: TERM REPRESENTATION
-  To represent terms in Coq one must pick a method of encoding variables.
-
-  The simplest solution would be to represent variables as strings, which is the most readable format.
-  Unfortunately this approach makes alpha-equivalent terms distinct which forces us to use equivalence relation, instead of Coq equality, making the whole process more complicated.
-  Moreover it lacks any form of controlling free variables, which is problematic when working with closed terms (and working with evaluation means dealing with closed terms almost exclusively).
-
-  The use of de Bruijn indices for encoding variables resolves the alpha-equivalence issue, but still gives no way of controlling free variables.
-
-  A solution to both issues is the format called nested-datatypes, which asserts that in a term of type `tm A` the only free variables are of type `A`.
-  The idea of de Bruijn indices is also utilized to represent bound variables.
-  Consider the lambda constructor of type `tm_abs : tm (option A) → tm A`, notice that the body of the lambda is of type `tm (option A)`
-  and therefore its free variables are either `None`, meaning a variable occurrence bound by the lambda, or `Some a` where `a` is a free variable of type `A`
-
-  In this format is trivial to assert that the term is closed as it's just a matter of plugging an uninhabited type for `A`.
-
-  TODO: this format usually requires generalizing your definitions/theorems and using abstract operations like Functor's map, or Monad's bind
  *)
 Inductive tm' {A} :=
 | tm_var' : A → tm'
