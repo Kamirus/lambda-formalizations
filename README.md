@@ -5,6 +5,7 @@
     - [Progress and Preservation](STLC_Generic.v)
   - [Legacy: Type-Level de Bruijn indices](stlc.v) (unnecessarily difficult approach)
 - **Delimited-Control Operators shift0/dollar**:
+  - Introduction : [Delimited Control](DelimitedControl.md)
   - **Contribution**:
     - Formalize `λ$` calculus with its **evaluation** strategy
     - Introduce an **evaluation** strategy for `λc$` (a fine-grained version of `λ$`)
