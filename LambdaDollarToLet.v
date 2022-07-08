@@ -488,9 +488,11 @@ Proof with auto.
   - repeat eexists.
     + apply multi_contr'. apply contr_beta'.
     + apply sim_subst_lemma...
+
+  (* <{ (λ e) v }> = <{ (λ ↑v0 $ 0) v }> ~> <{ v0 $ v }> ~ₑ <{ v0' v' }>, a case where λ$ is behind one step *)
   - repeat eexists.
     + auto.
-    + cbn. laws. constructor...
+    + cbn. laws. apply sim_eta_dol...
   - destruct j; inversion H1.
 Qed.
 
