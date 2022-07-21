@@ -86,7 +86,9 @@ Fixpoint dollar_to_let {A} (e : tm A) : tm' A :=
   | <{ e1 $ e2 }> => <| {dollar_to_let e1} $ {dollar_to_let e2} |>
   end.
 
-Lemma sim_dollar_to_let : ∀ {A} (e : tm A),
+(* ANCHOR Reflexivity of the Similarity Relation *)
+
+Lemma sim_refl_dollar_to_let : ∀ {A} (e : tm A),
   e ~ₑ dollar_to_let e.
 Proof.
   induction e; cbn; auto.
@@ -618,4 +620,13 @@ Proof.
   intros e v e' Hmulti Hsim.
   destruct (dollar_multi_to_let_multi e v e' Hmulti Hsim) as [v' [Hmulti' Hsim']].
   reason; eauto.
+Qed.
+
+Theorem dollar_to_let_equivalent_steps : ∀ e (v : val ␀),
+  e -->* v →
+  ∃ (v' : val' ␀), dollar_to_let e -->'* v' /\ v ~ᵥ v'.
+Proof.
+  intros.
+  apply (dollar_multi_to_let_multi_val e v (dollar_to_let e) H).
+  apply sim_refl_dollar_to_let.
 Qed.
