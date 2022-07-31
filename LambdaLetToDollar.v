@@ -138,7 +138,7 @@ Fixpoint let_to_dollar {A} (e : tm' A) : tm A :=
   | <| let e1 in e2 |> => <{ (λ {let_to_dollar e2}) {let_to_dollar e1} }>
   end.
 
-Lemma sim_let_to_dollar : ∀ {A} (e' : tm' A),
+Lemma sim_refl_let_to_dollar : ∀ {A} (e' : tm' A),
   e' ~ₑ let_to_dollar e'.
 Proof.
   induction e'; cbn; auto.
@@ -1007,4 +1007,13 @@ Proof.
   intros e' v' e Hmulti Hsim.
   destruct (let_multi_to_dollar_multi e' v' e Hmulti Hsim) as [v [Hmulti' Hsim']].
   reason; eauto.
+Qed.
+
+Theorem let_to_dollar_equivalent_steps : ∀ e' (v' : val' ␀),
+  e' -->'* v' →
+  ∃ (v : val ␀), let_to_dollar e' -->* v /\ v' ~ᵥ v.
+Proof.
+  intros.
+  apply (let_multi_to_dollar_multi_val e' v' (let_to_dollar e') H).
+  constructor; apply sim_refl_let_to_dollar.
 Qed.
