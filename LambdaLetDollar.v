@@ -1216,6 +1216,20 @@ Proof.
   subst. reflexivity.
 Qed.
 
+Lemma val_does_not_step' : ∀ (v : val' ␀) term,
+  v -->' term → False.
+Proof.
+  intros.
+  inversion H; clear H; subst.
+  destruct k; cbn in *.
+  - destruct t; cbn in *. subst.
+    + inversion H1; clear H1; subst.
+      destruct r, v; inversion H0; clear H0; subst;
+      destruct j; inversion H1.
+    + destruct v; inversion H0.
+  - destruct v; inversion H0.
+Qed.
+
 Lemma S0_val_does_not_step : ∀ (v : val' ␀) term,
   <| S₀ v |> -->' term → False.
 Proof.

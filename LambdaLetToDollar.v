@@ -101,13 +101,10 @@ Global Hint Constructors sim' : core.
 (* ANCHOR Similarity Relation + Small-Steps Grouping
  *)
 Reserved Notation "e' ~ e" (at level 40).
-Inductive sim : tm' ␀ → tm ␀ → Prop :=
-| sim_sim_tm : ∀ e' e, e' ~ₑ e → e' ~ e
-| sim_assoc  : ∀ e' e, e' ~' e → e' ~ e
-| sim_pre_shift     : ∀ k0' k0 t0' t0 v' v k' k j' j w' w, k0' ~ₖ k0 → t0' ~ₜ t0 → v' ~ᵥ v → k' ~ₖ k → j' ~ⱼ j → w' ~ᵥ w →
-    <| k0' [t0' [(λ {liftV' v'} $ ↑k'[↑j'[0]]) $ S₀ w']] |> ~ <{ k0 [t0 [v $ k [j [S₀ {liftV w} 0]]]] }>
-| sim_pre_shift_let : ∀ k0' k0 t0' t0 v' v k' k e' e w' w, k0' ~ₖ k0 → t0' ~ₜ t0 → v' ~ᵥ v → k' ~ₖ k → e' ~ₑ e → w' ~ᵥ w →
-    <| k0' [t0' [(λ {liftV' v'} $ ↑k'[  e'  ]) $ S₀ w']] |> ~ <{ k0 [t0 [v $ k [(λ e) (S₀ {liftV w} 0)]]] }>
+Inductive sim (e' : tm' ␀) (e : tm ␀) : Prop :=
+| sim_sim_tm : e' ~ₑ e → e' ~ e
+| sim_assoc  : e' ~' e → e' ~ e
+| sim_extra  : ∀ s', e' -->' s' → s' ~ₑ e → e' ~ e
 where "e' ~ e" := (sim e' e).
 Global Hint Constructors sim : core.
 
@@ -188,12 +185,7 @@ Proof.
   intros. inversion H; clear H; subst.
   - apply sim_val_inv in H0 as [v [Hsub Hsim]]; subst; eauto.
   - apply sim_val_inv' in H0. contradiction.
-  - destruct k0'; cbn in *;
-    try (destruct t0'; cbn in *);
-    destruct v'; inversion H0.
-  - destruct k0'; cbn in *;
-    try (destruct t0'; cbn in *);
-    destruct v'; inversion H0.
+  - apply val_does_not_step' in H0; destruct H0.
 Qed.
 
 Ltac reason := repeat(
@@ -735,6 +727,64 @@ Proof with auto.
   - apply (sim_assoc_let' K_nil' K_nil)...
 Qed.
 
+Lemma sim_pre_shift : ∀ k0' k0 t0' t0 v' v k' k j' j w' w esw,
+  k0' ~ₖ k0 →
+  t0' ~ₜ t0 →
+  v' ~ᵥ v →
+  k' ~ₖ k →
+  j' ~ⱼ j →
+  w' ~ᵥ w →
+  <{ esw }> -->* <{ S₀ {liftV w} 0 }> →
+  ∃ term,
+    <{ k0 [t0 [v $ k [j [esw]]]] }> -->* term /\
+    <| k0' [t0' [(λ {liftV' v'} $ ↑k'[↑j'[0]]) $ S₀ w']] |> ~ term.
+Proof with auto.
+  intros k0' k0 t0' t0 v' v k' k j' j w' w esw.
+  intros Hk0 Ht0 Hv Hk Hj Hw Hesw.
+  destruct (plug_k_compose_ex Hk (sim_K_cons _ _ _ _ Hj sim_K_nil)) as [kj' [kj [Hkj [_ [Hsub [_ Hsubl]]]]]].
+  cbn in *. rewrite Hsub.
+  repeat eexists.
+  - eapply multi_k. eapply multi_t.
+    eapply multi_trans. eapply multi_delim. eapply multi_k. apply Hesw.
+    eapply multi_contr. eapply contr_shift.
+  - cbn; laws.
+    eapply sim_extra.
+    rewrite lambda_to_val'.
+    + eapply step_k'. eapply step_t'. eapply step_contr'. eapply contr_shift'.
+    + rewrite <- Hsubl.
+      eapply sim_plug_k... eapply sim_plug_t... repeat constructor...
+      apply sim_plug_k... apply sim_plug_j... apply sim_lift_j...
+Qed.
+
+Lemma sim_pre_shift_let : ∀ k0' k0 t0' t0 v' v k' k e' e w' w esw,
+  k0' ~ₖ k0 →
+  t0' ~ₜ t0 →
+  v' ~ᵥ v →
+  k' ~ₖ k →
+  e' ~ₑ e →
+  w' ~ᵥ w →
+  <{ esw }> -->* <{ S₀ {liftV w} 0 }> →
+  ∃ term,
+    <{ k0 [t0 [v $ k [(λ e) (esw)]]] }> -->* term /\
+    <| k0' [t0' [(λ {liftV' v'} $ ↑k'[  e'  ]) $ S₀ w']] |> ~ term.
+Proof with auto.
+  intros k0' k0 t0' t0 v' v k' k e' e w' w esw.
+  intros Hk0 Ht0 Hv Hk He Hw Hesw.
+  destruct (plug_k_compose_ex Hk (sim_K_let _ _ _ _ He sim_K_nil)) as [ke' [ke [Hke [_ [Hsub [_ Hsubl]]]]]].
+  cbn in *. rewrite Hsub.
+  repeat eexists.
+  - eapply multi_k. eapply multi_t.
+    eapply multi_trans. eapply multi_delim. eapply multi_k. apply Hesw.
+    eapply multi_contr. eapply contr_shift.
+  - cbn; laws.
+    eapply sim_extra.
+    rewrite lambda_to_val'.
+    + eapply step_k'. eapply step_t'. eapply step_contr'. eapply contr_shift'.
+    + rewrite <- Hsubl.
+      eapply sim_plug_k... eapply sim_plug_t... constructor...
+      apply sim_beta...
+Qed.
+
 (* ANCHOR Simulation Step: ~ₑ to ~
  *)
 Lemma let_step_to_dollar_multi_aux : ∀ e1' e2' e1,
@@ -785,25 +835,11 @@ Proof with auto.
     inversion Hs; clear Hs; subst;
     try solve [destruct v'; inversion H; auto].
     * apply sim_app_inv in H1 as [es [e1_4 [Hes [He2 Hsub]]]]; reason; subst.
-      eapply sim_s_0_app in Hes.
-      repeat eexists.
-      + eapply multi_k. eapply multi_t.
-        eapply multi_trans.
-        eapply multi_delim. apply (multi_j (J_arg (val_abs _)) Hes). cbn.
-        auto.
-      + rename v into v', v1 into v, v0 into w', v2 into w, t0 into e', e2 into e.
-        rewrite lift_val_to_tm.
-        apply (sim_pre_shift_let _ _ _ _ _ _ K_nil' K_nil)...
+      eapply (sim_pre_shift_let _ _ _ _ _ _ K_nil' K_nil); eauto.
+      rewrite <- lift_val_to_tm. apply sim_s_0_app...
     * apply sim_app_inv in H3 as [es [e1_4 [Hes [He2 Hsub]]]]; reason; subst.
-      eapply sim_s_0_app in Hes.
-      repeat eexists.
-      + eapply multi_k. eapply multi_t.
-        eapply multi_trans.
-        eapply multi_delim. apply (multi_j _ Hes).
-        auto.
-      + rename v into v', v1 into v, v0 into w', v2 into w.
-        rewrite lift_val_to_tm.
-        apply (sim_pre_shift _ _ _ _ _ _ K_nil' K_nil)...
+      eapply (sim_pre_shift _ _ _ _ _ _ K_nil' K_nil); eauto.
+      rewrite <- lift_val_to_tm. apply sim_s_0_app...
   }
 
   (* redex_let' *)
@@ -936,7 +972,7 @@ Proof with auto.
         apply plug_shift_step_inv' in Hstep as [inner [Hsub Hstep]]; subst.
         apply shift_step_inv' in Hstep as [[Hkt Hsub]|[inner2 [Hstep Hsub]]]; subst; cbn in *.
         * inversion Hk; clear Hk; subst; cbn in *.
-          repeat eexists; auto.
+          eapply sim_pre_shift... assumption.
         * eapply aux_K1 in Hstep as [term [Hmulti Hsim]]; eauto.
           repeat eexists.
           - eapply multi_k. eapply multi_t. eapply multi_delim. apply Hmulti.
@@ -949,34 +985,15 @@ Proof with auto.
         apply plug_shift_step_inv' in Hstep as [inner [Hsub Hstep]]; subst.
         apply shift_step_inv' in Hstep as [[Hkt Hsub]|[inner2 [Hstep Hsub]]]; subst; cbn in *.
         * inversion Hk; clear Hk; subst; cbn in *.
-          repeat eexists; auto.
+          eapply sim_pre_shift_let... assumption.
         * eapply aux_K2 in Hstep as [term [Hmulti Hsim]]; eauto.
           repeat eexists.
           - eapply multi_k. eapply multi_t. eapply multi_delim. apply Hmulti.
           - apply sim_assoc. eapply sim_plug_k'... eapply sim_plug_t'... eapply (sim_plug_t' (T_cons' w' K_nil' T_nil') (T_cons w K_nil T_nil))...
     }
-  - rewrite lambda_to_val' in Hstep.
-    rewrite fold_redex_shift' in Hstep.
-    apply plug_step_inv in Hstep; subst. cbn.
-    destruct (plug_k_compose_ex H2 (sim_K_cons _ _ _ _ H3 sim_K_nil)) as [kj' [kj [Hkj [_ [Hsub2 [_ Hsubl2]]]]]].
-    cbn in *. rewrite Hsub2.
-    repeat eexists.
-    + eapply multi_k. eapply multi_t. eapply multi_contr_multi. apply contr_shift.
-      cbn. laws. auto.
-    + rewrite <- Hsubl2.
-      apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... repeat constructor...
-      apply sim_plug_k... apply sim_plug_j... apply sim_lift_j...
-  - rewrite lambda_to_val' in Hstep.
-    rewrite fold_redex_shift' in Hstep.
-    apply plug_step_inv in Hstep; subst. cbn.
-    destruct (plug_k_compose_ex H2 (sim_K_let _ _ _ _ H3 sim_K_nil)) as [kj' [kj [Hkj [_ [Hsub2 [_ Hsubl2]]]]]].
-    cbn in *. rewrite Hsub2.
-    repeat eexists.
-    + eapply multi_k. eapply multi_t. eapply multi_contr_multi. apply contr_shift.
-      cbn. laws. auto.
-    + rewrite <- Hsubl2.
-      apply sim_sim_tm. apply sim_plug_k... apply sim_plug_t... constructor...
-      apply sim_beta...
+  - repeat eexists; auto.
+    apply (deterministic_step' _ _ _ Hstep) in H; subst.
+    constructor...
 Qed.
 
 (* ANCHOR Simulation
