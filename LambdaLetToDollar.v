@@ -79,7 +79,7 @@ Global Hint Constructors sim_tm : core.
 
 (* ANCHOR Small-Steps Grouping: Context Build-Up
  *)
-Reserved Notation "e' ~' e" (at level 40).
+Reserved Notation "e' ~ₐ e" (at level 40).
 Inductive sim' : tm' ␀ → tm ␀ → Prop :=
 | sim_assoc'  : ∀ k0' k0 t0' t0 v' v k' k j' j,
     k0' ~ₖ k0 →
@@ -87,23 +87,23 @@ Inductive sim' : tm' ␀ → tm ␀ → Prop :=
     v' ~ᵥ v →
     k' ~ₖ k →
     j' ~ⱼ j →
-    <| k0'[t0'[let S₀ v' in ↑k'[↑j'[0]]]] |> ~' <{ k0[t0[k[j[S₀ {liftV v} 0]]]] }>
+    <| k0'[t0'[let S₀ v' in ↑k'[↑j'[0]]]] |> ~ₐ <{ k0[t0[k[j[S₀ {liftV v} 0]]]] }>
 | sim_assoc_let'  : ∀ k0' k0 t0' t0 v' v k' k e' e,
     k0' ~ₖ k0 →
     t0' ~ₜ t0 →
     v' ~ᵥ v →
     k' ~ₖ k →
     e' ~ₑ e →
-    <| k0'[t0'[let S₀ v' in ↑k'[e']]] |> ~' <{ k0[t0[k[(λ e) (S₀ {liftV v} 0)]]] }>
-where "e' ~' e" := (sim' e' e).
+    <| k0'[t0'[let S₀ v' in ↑k'[e']]] |> ~ₐ <{ k0[t0[k[(λ e) (S₀ {liftV v} 0)]]] }>
+where "e' ~ₐ e" := (sim' e' e).
 Global Hint Constructors sim' : core.
 
 (* ANCHOR Similarity Relation + Small-Steps Grouping
  *)
 Reserved Notation "e' ~ e" (at level 40).
 Inductive sim (e' : tm' ␀) (e : tm ␀) : Prop :=
-| sim_sim_tm : e' ~ₑ e → e' ~ e
-| sim_assoc  : e' ~' e → e' ~ e
+| sim_sim_tm :       e'              ~ₑ e → e' ~ e
+| sim_assoc  :       e'              ~ₐ e → e' ~ e
 | sim_extra  : ∀ s', e' -->' s' → s' ~ₑ e → e' ~ e
 where "e' ~ e" := (sim e' e).
 Global Hint Constructors sim : core.
@@ -171,7 +171,7 @@ Proof with auto.
 Qed.
 
 Lemma sim_val_inv' : ∀ (v' : val' ␀) (e : tm ␀),
-  ~ v' ~' e.
+  ~ v' ~ₐ e.
 Proof.
   intros. intro. inversion H; clear H; subst;
   destruct k0'; cbn in *;
@@ -700,8 +700,8 @@ Qed.
 
 Lemma sim_plug_k' : ∀ k' k e' e,
   k' ~ₖ k →
-  e' ~' e →
-  <| k'[e'] |> ~' <{ k[e] }>.
+  e' ~ₐ e →
+  <| k'[e'] |> ~ₐ <{ k[e] }>.
 Proof with auto.
   intros. inversion H0; clear H0; subst.
   - destruct (plug_k_compose H H1) as [k3' [k3 [Hk [Hsub1 Hsub2]]]]. rewrite Hsub1. rewrite Hsub2.
@@ -712,8 +712,8 @@ Qed.
 
 Lemma sim_plug_t' : ∀ t' t e' e,
   t' ~ₜ t →
-  e' ~' e →
-  <| t'[e'] |> ~' <{ t[e] }>.
+  e' ~ₐ e →
+  <| t'[e'] |> ~ₐ <{ t[e] }>.
 Proof with auto.
   intros. inversion H0; clear H0; subst;
   destruct (t_inv_inner t' t H) as [[Hsub1 Hsub2]|[t2' [t2 [w' [w [k2' [k2 [Ht [Hw [Hk [Hsub1 Hsub2]]]]]]]]]]]; subst; cbn in *; auto;
@@ -908,7 +908,7 @@ Lemma aux_K1 : ∀ k0' k0 v' v k' k j' j term',
   k' ~ₖ k →
   j' ~ⱼ j →
   <| k0' [let S₀ v' in ↑k'[↑j'[0]]] |> -->' term' →
-  term' ~' <{ k0 [k [j [S₀ {liftV v} 0]]] }>.
+  term' ~ₐ <{ k0 [k [j [S₀ {liftV v} 0]]] }>.
 Proof with auto.
   intros k0' k0 v' v k' k j' j term' Hk0 Hv Hk Hj Hstep.
   destruct (k_inv_inner _ _ Hk0) as
@@ -932,7 +932,7 @@ Lemma aux_K2 : ∀ k0' k0 v' v k' k e' e term',
   k' ~ₖ k →
   e' ~ₑ e →
   <| k0' [let S₀ v' in ↑k'[e']] |> -->' term' →
-  term' ~' <{ k0 [k [(λ e) (S₀ {liftV v} 0)]] }>.
+  term' ~ₐ <{ k0 [k [(λ e) (S₀ {liftV v} 0)]] }>.
 Proof with auto.
   intros k0' k0 v' v k' k j' j term' Hk0 Hv Hk Hj Hstep.
   destruct (k_inv_inner _ _ Hk0) as
