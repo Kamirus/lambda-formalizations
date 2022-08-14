@@ -145,6 +145,18 @@ Ltac reason := repeat(
   | H : val_to_tm  ?v = non_to_tm  ?p |- _ => destruct v, p; inversion H
   end).
 
+Lemma broken_sim_plug_j_inv_as_term_not_nonvalue : ∀ {A} (j : J A) e term',
+  <{ j[e] }> ~ₑ term' →
+  (∃ j' e', j ~ⱼ j' /\ e ~ₑ e' /\ ( term' = <| j'[e'] |> \/ term' = <| let e' in ↑j'[0] |>)) \/
+  (∃ v v' e', j = J_arg v /\ e ~ₑ e' /\ v ~ᵥ v' /\ term' = <| let v' in 0 ↑e' |>).
+Proof.
+  intros; destruct j; inversion H; clear H; subst; reason; cbn in *; subst;
+  try solve [left; repeat eexists; eauto].
+  admit. admit. left; repeat eexists; eauto.
+  cbn.
+  (* Imposible: v1' v2' = v1' $ v2' *)
+Abort.
+
 Lemma sim_plug_j_inv : ∀ {A} (j : J A) (p : non A) term',
   <{ j[p] }> ~ₑ term' →
   (∃ j' p', j ~ⱼ j' /\ p ~ₚ p' /\ ( term' = <| j'[p'] |> \/ term' = <| let p' in ↑j'[0] |>)) \/
