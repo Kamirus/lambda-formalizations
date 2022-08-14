@@ -907,8 +907,8 @@ Lemma aux_K1 : ∀ k0' k0 v' v k' k j' j term',
   v' ~ᵥ v →
   k' ~ₖ k →
   j' ~ⱼ j →
-  <| k0' [let S₀ v' in ↑k'[↑j'[0]]] |> -->' term' → ∃ term,
-  <{ k0  [k [j [S₀ {liftV v}   0]]] }> -->* term /\ term' ~' term.
+  <| k0' [let S₀ v' in ↑k'[↑j'[0]]] |> -->' term' →
+  term' ~' <{ k0 [k [j [S₀ {liftV v} 0]]] }>.
 Proof with auto.
   intros k0' k0 v' v k' k j' j term' Hk0 Hv Hk Hj Hstep.
   destruct (k_inv_inner _ _ Hk0) as
@@ -916,13 +916,11 @@ Proof with auto.
     |[[k2' [k2 [j2' [j2 [Hk2 [Hj2 [Hke' Hke]]]]]]]
       |[k2' [k2 [e2' [e2 [Hk2 [Hj2 [Hke' Hke]]]]]]]]].
   * subst. cbn in *. apply let_S0_does_not_step in Hstep. destruct Hstep.
-  * repeat eexists; auto.
-    rewrite Hke' in *.
+  * rewrite Hke' in *.
     rewrite Hke in *.
     apply plug_k_let_let_S0_step_inv in Hstep. subst.
     apply (sim_assoc' k2' k2 T_nil' T_nil v' v (K_let' k' <| ↑j2'[0] |>) (K_cons j2 k))...
-  * repeat eexists; auto.
-    rewrite Hke' in *.
+  * rewrite Hke' in *.
     rewrite Hke in *.
     apply plug_k_let_let_S0_step_inv in Hstep. subst.
     apply (sim_assoc' k2' k2 T_nil' T_nil v' v (K_let' k' e2') (K_arg <{ λv e2 }> k))... constructor...
@@ -933,8 +931,8 @@ Lemma aux_K2 : ∀ k0' k0 v' v k' k e' e term',
   v' ~ᵥ v →
   k' ~ₖ k →
   e' ~ₑ e →
-  <| k0' [let S₀ v' in ↑k'[e']] |> -->' term' → ∃ term,
-  <{ k0  [k [(λ e) (S₀ {liftV v} 0)]] }> -->* term /\ term' ~' term.
+  <| k0' [let S₀ v' in ↑k'[e']] |> -->' term' →
+  term' ~' <{ k0 [k [(λ e) (S₀ {liftV v} 0)]] }>.
 Proof with auto.
   intros k0' k0 v' v k' k j' j term' Hk0 Hv Hk Hj Hstep.
   destruct (k_inv_inner _ _ Hk0) as
@@ -942,13 +940,11 @@ Proof with auto.
     |[[k2' [k2 [j2' [j2 [Hk2 [Hj2 [Hke' Hke]]]]]]]
       |[k2' [k2 [e2' [e2 [Hk2 [Hj2 [Hke' Hke]]]]]]]]].
   * subst. cbn in *. apply let_S0_does_not_step in Hstep. destruct Hstep.
-  * repeat eexists; auto.
-    rewrite Hke' in *.
+  * rewrite Hke' in *.
     rewrite Hke in *.
     apply plug_k_let_let_S0_step_inv in Hstep. subst.
     apply (sim_assoc_let' k2' k2 T_nil' T_nil v' v (K_let' k' <| ↑j2'[0] |>) (K_cons j2 k))...
-  * repeat eexists; auto.
-    rewrite Hke' in *.
+  * rewrite Hke' in *.
     rewrite Hke in *.
     apply plug_k_let_let_S0_step_inv in Hstep. subst.
     apply (sim_assoc_let' k2' k2 T_nil' T_nil v' v (K_let' k' e2') (K_arg <{ λv e2 }> k))... constructor...
@@ -966,30 +962,30 @@ Proof with auto.
   - apply (let_step_to_dollar_multi_aux _ _ _ Hstep H).
   - inversion H; clear H; subst. 
     { destruct (t_inv_inner _ _ H1) as [[Ht' Ht]|[t' [t [w' [w [kt' [kt [Ht [Hv [Hk [Hsub1 Hsub2]]]]]]]]]]]; subst; cbn in *.
-      + eapply aux_K1 in Hstep as [term [Hmulti Hsim]]; eauto.
+      + repeat eexists; auto.
+        eapply aux_K1 in Hstep as Hsim; eauto.
       + rewrite Hsub1 in *.
         rewrite Hsub2 in *.
         apply plug_shift_step_inv' in Hstep as [inner [Hsub Hstep]]; subst.
         apply shift_step_inv' in Hstep as [[Hkt Hsub]|[inner2 [Hstep Hsub]]]; subst; cbn in *.
         * inversion Hk; clear Hk; subst; cbn in *.
           eapply sim_pre_shift... assumption.
-        * eapply aux_K1 in Hstep as [term [Hmulti Hsim]]; eauto.
-          repeat eexists.
-          - eapply multi_k. eapply multi_t. eapply multi_delim. apply Hmulti.
-          - apply sim_assoc. eapply sim_plug_k'... eapply sim_plug_t'... eapply (sim_plug_t' (T_cons' w' K_nil' T_nil') (T_cons w K_nil T_nil))...
+        * eapply aux_K1 in Hstep as Hsim; eauto.
+          repeat eexists; auto.
+          apply sim_assoc. eapply sim_plug_k'... eapply sim_plug_t'... eapply (sim_plug_t' (T_cons' w' K_nil' T_nil') (T_cons w K_nil T_nil))...
     }
     { destruct (t_inv_inner _ _ H1) as [[Ht' Ht]|[t' [t [w' [w [kt' [kt [Ht [Hv [Hk [Hsub1 Hsub2]]]]]]]]]]]; subst; cbn in *.
-      + eapply aux_K2 in Hstep as [term [Hmulti Hsim]]; eauto.
+      + repeat eexists; auto.
+        eapply aux_K2 in Hstep as Hsim; eauto.
       + rewrite Hsub1 in *.
         rewrite Hsub2 in *.
         apply plug_shift_step_inv' in Hstep as [inner [Hsub Hstep]]; subst.
         apply shift_step_inv' in Hstep as [[Hkt Hsub]|[inner2 [Hstep Hsub]]]; subst; cbn in *.
         * inversion Hk; clear Hk; subst; cbn in *.
           eapply sim_pre_shift_let... assumption.
-        * eapply aux_K2 in Hstep as [term [Hmulti Hsim]]; eauto.
-          repeat eexists.
-          - eapply multi_k. eapply multi_t. eapply multi_delim. apply Hmulti.
-          - apply sim_assoc. eapply sim_plug_k'... eapply sim_plug_t'... eapply (sim_plug_t' (T_cons' w' K_nil' T_nil') (T_cons w K_nil T_nil))...
+        * eapply aux_K2 in Hstep as Hsim; eauto.
+          repeat eexists; auto.
+          apply sim_assoc. eapply sim_plug_k'... eapply sim_plug_t'... eapply (sim_plug_t' (T_cons' w' K_nil' T_nil') (T_cons w K_nil T_nil))...
     }
   - repeat eexists; auto.
     apply (deterministic_step' _ _ _ Hstep) in H; subst.
