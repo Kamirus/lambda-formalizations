@@ -42,12 +42,12 @@ Admitted.
 
 (* ANCHOR Decompose
  *)
- Fixpoint decompose (e : tm ␀) : dec T redex ␀ :=
+ Fixpoint decompose (e : tm ∅) : dec T redex ∅ :=
     match e with
     | tm_val v => dec_value v
     | tm_non p => decomposeP p
     end
-  with decomposeP (p : non ␀) : dec T redex ␀ :=
+  with decomposeP (p : non ∅) : dec T redex ∅ :=
     match p with
     | <{ v v' }> =>
       match v with
@@ -72,7 +72,7 @@ Admitted.
 
 (* ANCHOR Evaluation
  *)
-Definition contract (r : redex ␀) : tm ␀ :=
+Definition contract (r : redex ∅) : tm ∅ :=
     match r with
     (* (λ x. e) v  ~>  e [x := v] *)
     | redex_beta e v => <{ e [0 := v] }>
@@ -94,14 +94,14 @@ Definition optional_step e :=
   end.
 
 Reserved Notation "e1 ~> e2" (at level 40).
-Inductive contr : tm ␀ → tm ␀ → Prop :=
+Inductive contr : tm ∅ → tm ∅ → Prop :=
 | contr_tm : ∀ r, redex_to_term r ~> contract r
 where "e1 ~> e2" := (contr e1 e2).
 Global Hint Constructors contr : core.
 
 Reserved Notation "e1 --> e2" (at level 40).
-Inductive step : tm ␀ → tm ␀ → Prop :=
-| step_tm : ∀ (k : K ␀) (t : T ␀) (e1 e2 : tm ␀), e1 ~> e2 → <{ k[t[e1]] }> --> <{ k[t[e2]] }>
+Inductive step : tm ∅ → tm ∅ → Prop :=
+| step_tm : ∀ (k : K ∅) (t : T ∅) (e1 e2 : tm ∅), e1 ~> e2 → <{ k[t[e1]] }> --> <{ k[t[e2]] }>
 where "e1 --> e2" := (step e1 e2).
 Global Hint Constructors step : core.
 
@@ -128,10 +128,10 @@ Lemma multi_contr_multi : ∀ {e1 e2 e3},
 Proof.
   intros. eapply multi_step; try eapply (step_tm K_nil T_nil); cbn; eassumption.
 Qed.
-Definition contr_beta : ∀ e (v : val ␀), <{ (λ e) v }> ~> <{ e [ 0 := v ] }> := λ e v, contr_tm (redex_beta e v).
-Definition contr_dollar : ∀ (v1 v2 : val ␀), <{ v1 $ v2 }> ~> <{ v1 v2 }> := λ v1 v2, contr_tm (redex_dollar v1 v2).
-Definition contr_let_beta : ∀ (v : val ␀) e, <{ let v in e }> ~> <{ e [ 0 := v ] }> := λ v e, contr_tm (redex_let_beta v e).
-Definition contr_shift : ∀ (w : val ␀) (k : K ␀) (v : val ␀), <{ w $ k [S₀ v] }> ~> <{ v (λ ↑w $ ↑k[0]) }> := λ w k v, contr_tm (redex_shift w k v).
+Definition contr_beta : ∀ e (v : val ∅), <{ (λ e) v }> ~> <{ e [ 0 := v ] }> := λ e v, contr_tm (redex_beta e v).
+Definition contr_dollar : ∀ (v1 v2 : val ∅), <{ v1 $ v2 }> ~> <{ v1 v2 }> := λ v1 v2, contr_tm (redex_dollar v1 v2).
+Definition contr_let_beta : ∀ (v : val ∅) e, <{ let v in e }> ~> <{ e [ 0 := v ] }> := λ v e, contr_tm (redex_let_beta v e).
+Definition contr_shift : ∀ (w : val ∅) (k : K ∅) (v : val ∅), <{ w $ k [S₀ v] }> ~> <{ v (λ ↑w $ ↑k[0]) }> := λ w k v, contr_tm (redex_shift w k v).
 Global Hint Resolve step_contr contr_beta contr_dollar contr_shift contr_let_beta : core.
 
 Lemma deterministic_contr : ∀ e e1 e2,
@@ -181,13 +181,13 @@ Fixpoint eval i e :=
   end.
 
 Section Examples.
-  Definition _id : val ␀ := <{ λ 0 }>.
-  Definition _const : val ␀ := <{ λ λ 1 }>.
+  Definition _id : val ∅ := <{ λ 0 }>.
+  Definition _const : val ∅ := <{ λ λ 1 }>.
 
   Compute (eval 10 <{ _id $ _const $ S₀ (λ 0) }>).
   Compute (eval 10 <{ _const $ _id $ S₀ (λ 0) }>).
 
-  Definition _e1 : tm ␀ := <{
+  Definition _e1 : tm ∅ := <{
     _id $
       let λ 0 0 in
       let S₀ 0 in

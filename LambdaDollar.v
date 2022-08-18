@@ -359,7 +359,7 @@ Definition K_dol {A} k e := @K_cons A (J_dol e) k.
 
 (* ANCHOR Decompose
  *)
-Fixpoint decompose (e : tm ␀) : dec ␀ :=
+Fixpoint decompose (e : tm ∅) : dec ∅ :=
   match e with
   | <{ var a }> => from_void a
   | <{ λ  e' }> => dec_value (val_abs e')
@@ -459,7 +459,7 @@ Proof.
   - rewrite IHk; auto.
   Qed.
 
-Lemma decompose_plug_redex : ∀ k t (r : redex ␀),
+Lemma decompose_plug_redex : ∀ k t (r : redex ∅),
   decompose <{ k[t[r]] }> = dec_redex k t r.
 Proof with cbn; auto.
   intros k t; generalize dependent k; induction t; intros...
@@ -581,7 +581,7 @@ Qed.
 
 (* ANCHOR Evaluation
  *)
-Definition contract (r : redex ␀) : tm ␀ :=
+Definition contract (r : redex ∅) : tm ∅ :=
   match r with
   (* (λ x. e) v  ~>  e [x := v] *)
   | redex_beta (val_abs e) v => <{ e [0 := v] }>
@@ -600,14 +600,14 @@ Definition optional_step e :=
   end.
 
 Reserved Notation "e1 ~> e2" (at level 40).
-Inductive contr : tm ␀ → tm ␀ → Prop :=
+Inductive contr : tm ∅ → tm ∅ → Prop :=
 | contr_tm : ∀ r, redex_to_term r ~> contract r
 where "e1 ~> e2" := (contr e1 e2).
 Global Hint Constructors contr : core.
 
 Reserved Notation "e1 --> e2" (at level 40).
-Inductive step : tm ␀ → tm ␀ → Prop :=
-| step_tm : ∀ (k : K ␀) (t : T ␀) (e1 e2 : tm ␀), e1 ~> e2 → <{ k[t[e1]] }> --> <{ k[t[e2]] }>
+Inductive step : tm ∅ → tm ∅ → Prop :=
+| step_tm : ∀ (k : K ∅) (t : T ∅) (e1 e2 : tm ∅), e1 ~> e2 → <{ k[t[e1]] }> --> <{ k[t[e2]] }>
 where "e1 --> e2" := (step e1 e2).
 Global Hint Constructors step : core.
 
@@ -635,19 +635,19 @@ Proof.
   intros. eapply multi_step; try eapply (step_tm K_nil T_nil); cbn; eassumption.
 Qed.
 
-Lemma contr_beta : ∀ e (v : val ␀),
+Lemma contr_beta : ∀ e (v : val ∅),
   <{ (λ e) v }> ~> <{ e [0 := v] }>.
 Proof.
   intros. change <{ (λ e) v }> with (redex_to_term (redex_beta <{ λv e }> v)).
   constructor.
 Qed.
-Lemma contr_dollar : ∀ (v1 v2 : val ␀),
+Lemma contr_dollar : ∀ (v1 v2 : val ∅),
   <{ v1 $ v2 }> ~> <{ v1 v2 }>.
 Proof.
   intros. change <{ v1 $ v2 }> with (redex_to_term (redex_dollar v1 v2)).
   constructor.
 Qed.
-Lemma contr_shift : ∀ (v : val ␀) k e,
+Lemma contr_shift : ∀ (v : val ∅) k e,
   <{ v $ k[S₀ e] }> ~> <{ e [0 := λv {liftV v} $ ↑k[0] ] }>.
 Proof.
   intros. change <{ v $ k[S₀ e] }> with (redex_to_term (redex_shift v k e)). constructor.
@@ -676,15 +676,15 @@ Fixpoint eval i e :=
   end.
 
 Section Examples.
-  Definition _id : tm ␀ := <{ λ 0 }>.
-  Definition _const : tm ␀ := <{ λ λ 1 }>.
+  Definition _id : tm ∅ := <{ λ 0 }>.
+  Definition _const : tm ∅ := <{ λ λ 1 }>.
 
   Compute (eval 10 <{ _id $ _const $ S₀ 0 }>).
   Compute (eval 10 <{ _const $ _id $ S₀ 0 }>).
 
-  Definition j1 : J ␀ := J_fun <{ λ 0 0 }>.
-  Definition j2 : J ␀ := J_arg <{ λv 0 }>.
-  Definition j3 : J ␀ := J_dol <{ λ 0 }>.
+  Definition j1 : J ∅ := J_fun <{ λ 0 0 }>.
+  Definition j2 : J ∅ := J_arg <{ λv 0 }>.
+  Definition j3 : J ∅ := J_dol <{ λ 0 }>.
   Definition ej123 := <{ j1[j2[j3[S₀ 0]]] }>.
 
   Example ex_shift : eval 1 <{ _id $ ej123 }> = <{
@@ -695,7 +695,7 @@ Section Examples.
 End Examples.
 
 
-Lemma plug_non_is_non : ∀ (k : K ␀) (t : T ␀) (p : non ␀),
+Lemma plug_non_is_non : ∀ (k : K ∅) (t : T ∅) (p : non ∅),
   ∃ ktp, <{ k [t [p]] }> = non_to_tm ktp.
 Proof.
   intros; destruct k; cbn in *.
@@ -713,7 +713,7 @@ Proof.
 Qed.
 
 
-Lemma step_j : ∀ {j : J ␀} {e1 e2},
+Lemma step_j : ∀ {j : J ∅} {e1 e2},
   e1 --> e2 →
   <{ j[e1] }> --> <{ j[e2] }>.
 Proof.
@@ -723,7 +723,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma multi_j : ∀ {e1 e2} (j : J ␀),
+Lemma multi_j : ∀ {e1 e2} (j : J ∅),
   e1 -->* e2 →
   <{ j[e1] }> -->* <{ j[e2] }>.
 Proof.
@@ -734,7 +734,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma step_delim : ∀ {v : val ␀} {e1 e2},
+Lemma step_delim : ∀ {v : val ∅} {e1 e2},
   e1 --> e2 →
   <{ v $ e1 }> --> <{ v $ e2 }>.
 Proof.
@@ -744,7 +744,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma multi_delim : ∀ {v : val ␀} {e1 e2},
+Lemma multi_delim : ∀ {v : val ∅} {e1 e2},
   e1 -->* e2 →
   <{ v $ e1 }> -->* <{ v $ e2 }>.
 Proof.
@@ -755,7 +755,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma step_k : ∀ {e1 e2} {k : K ␀},
+Lemma step_k : ∀ {e1 e2} {k : K ∅},
   e1 --> e2 →
   <{ k[e1] }> --> <{ k[e2] }>.
 Proof.
@@ -764,7 +764,7 @@ Proof.
   cbn. apply step_j. apply IHk. apply H.
 Qed.
 
-Lemma multi_k : ∀ {e1 e2} {k : K ␀},
+Lemma multi_k : ∀ {e1 e2} {k : K ∅},
   e1 -->* e2 →
   <{ k[e1] }> -->* <{ k[e2] }>.
 Proof.
@@ -775,7 +775,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma step_t : ∀ {e1 e2} {t : T ␀},
+Lemma step_t : ∀ {e1 e2} {t : T ∅},
   e1 --> e2 →
   <{ t[e1] }> --> <{ t[e2] }>.
 Proof.
@@ -784,7 +784,7 @@ Proof.
   cbn. apply step_delim. apply step_k. apply IHt. apply H.
 Qed.
 
-Lemma multi_t : ∀ {e1 e2} {t : T ␀},
+Lemma multi_t : ∀ {e1 e2} {t : T ∅},
   e1 -->* e2 →
   <{ t[e1] }> -->* <{ t[e2] }>.
 Proof.

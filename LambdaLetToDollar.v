@@ -80,7 +80,7 @@ Global Hint Constructors sim_tm : core.
 (* ANCHOR Small-Steps Grouping: Context Build-Up
  *)
 Reserved Notation "e' ~ₐ e" (at level 40).
-Inductive sim' : tm' ␀ → tm ␀ → Prop :=
+Inductive sim' : tm' ∅ → tm ∅ → Prop :=
 | sim_assoc'  : ∀ k0' k0 t0' t0 v' v k' k j' j,
     k0' ~ₖ k0 →
     t0' ~ₜ t0 →
@@ -101,7 +101,7 @@ Global Hint Constructors sim' : core.
 (* ANCHOR Similarity Relation + Small-Steps Grouping
  *)
 Reserved Notation "e' ~ e" (at level 40).
-Inductive sim (e' : tm' ␀) (e : tm ␀) : Prop :=
+Inductive sim (e' : tm' ∅) (e : tm ∅) : Prop :=
 | sim_sim_tm :       e'              ~ₑ e → e' ~ e
 | sim_assoc  :       e'              ~ₐ e → e' ~ e
 | sim_extra  : ∀ s', e' -->' s' → s' ~ₑ e → e' ~ e
@@ -170,7 +170,7 @@ Proof with auto.
       constructor. cbn. assumption.
 Qed.
 
-Lemma sim_val_inv' : ∀ (v' : val' ␀) (e : tm ␀),
+Lemma sim_val_inv' : ∀ (v' : val' ∅) (e : tm ∅),
   ~ v' ~ₐ e.
 Proof.
   intros. intro. inversion H; clear H; subst;
@@ -179,8 +179,8 @@ Proof.
   destruct v'; inversion H0.
 Qed.
 
-Lemma sim_val_inv'' : ∀ (v' : val' ␀) (e : tm ␀),
-  v' ~ e → ∃ (v : val ␀), e = v /\ v' ~ᵥ v.
+Lemma sim_val_inv'' : ∀ (v' : val' ∅) (e : tm ∅),
+  v' ~ e → ∃ (v : val ∅), e = v /\ v' ~ᵥ v.
 Proof.
   intros. inversion H; clear H; subst.
   - apply sim_val_inv in H0 as [v [Hsub Hsim]]; subst; eauto.
@@ -232,10 +232,10 @@ Proof.
   destruct v'; inversion H0.
 Qed.
 
-Lemma sim_let_inv : ∀ (e1' : tm' ␀) e2' term,
+Lemma sim_let_inv : ∀ (e1' : tm' ∅) e2' term,
   <| let e1' in e2' |> ~ₑ term →
     (∃ e1 e2, e1' ~ₑ e1 /\ e2' ~ₑ e2 /\ term = <{ (λ e2) e1 }>) \/
-    (∃ (j' : J' ␀) (j : J ␀) e1, e1' ~ₑ e1 /\ j' ~ⱼ j /\ e2' = <| ↑j'[0] |> /\ term = <{ j[e1] }>).
+    (∃ (j' : J' ∅) (j : J ∅) e1, e1' ~ₑ e1 /\ j' ~ⱼ j /\ e2' = <| ↑j'[0] |> /\ term = <{ j[e1] }>).
 Proof.
   intros. inversion H; clear H; subst.
   - left; eauto.
@@ -504,7 +504,7 @@ Proof with auto.
 Qed.
 Global Hint Resolve sim_bind : core.
 
-Lemma sim_subst_lemma : ∀ e' e v' (v : val ␀),
+Lemma sim_subst_lemma : ∀ e' e v' (v : val ∅),
   e' ~ₑ e →
   v' ~ᵥ v →
   <| e' [0 := v'] |> ~ₑ <{ e [0 := v] }>.
@@ -536,7 +536,7 @@ Ltac laws := repeat(
       rewrite bind_var_subst_lift_k'
   end).
 
-Example example_beta_exp_subst : ∀ (e : tm ^␀) (v : val ␀),
+Example example_beta_exp_subst : ∀ (e : tm ^∅) (v : val ∅),
   <{ (↑(λ e) 0)[0 := v] }> --> <{ e [0 := v] }>.
 Proof.
   intros.
@@ -545,7 +545,7 @@ Proof.
 Qed.
 
 
-Lemma sim_redex_beta : ∀ e' (v' : val' ␀) ev v,
+Lemma sim_redex_beta : ∀ e' (v' : val' ∅) ev v,
   <| λ e' |> ~ₑ ev →
   v' ~ᵥ v → ∃ term,
     <{ ev v }> -->* term /\ 
@@ -573,7 +573,7 @@ Proof with auto.
       apply (sim_subst_lemma e' e v0' v0)...
 Qed.
 
-Lemma sim_redex_let_beta : ∀ (v' : val' ␀) e' elet v,
+Lemma sim_redex_let_beta : ∀ (v' : val' ∅) e' elet v,
   <| let v' in e' |> ~ₑ elet →
   v' ~ᵥ v → ∃ term,
     elet -->* term /\
@@ -589,7 +589,7 @@ Proof with auto.
     + rewrite subst_plug_of_lift_j. apply sim_plug_j...
 Qed.
 
-Lemma sim_s_0_app : ∀ (es : tm ␀) (v : val ␀),
+Lemma sim_s_0_app : ∀ (es : tm ∅) (v : val ∅),
   <| S₀ |> ~ₑ es → <{ es v }> -->* <{ S₀ {↑(val_to_tm v)} 0 }>.
 Proof.
   intros. generalize dependent v.
@@ -637,15 +637,15 @@ Proof with auto.
 Qed.
 Global Hint Resolve sim_lift_k : core.
 
-Lemma t_inv_inner : ∀ (t' : T' ␀) (t : T ␀),
+Lemma t_inv_inner : ∀ (t' : T' ∅) (t : T ∅),
   t' ~ₜ t →
   (t' = T_nil' /\ t = T_nil) \/
-  (∃ (t2' : T' ␀) (t2 : T ␀) (v' : val' ␀) (v : val ␀) (k' : K' ␀) (k : K ␀),
+  (∃ (t2' : T' ∅) (t2 : T ∅) (v' : val' ∅) (v : val ∅) (k' : K' ∅) (k : K ∅),
     t2' ~ₜ t2 /\
     v' ~ᵥ v /\
     k' ~ₖ k /\
-    (∀ (e' : tm' ␀), <| t'[e'] |> = <| t2'[v' $ k'[e']] |>) /\
-    (∀ (e  : tm  ␀), <{ t [e ] }> = <{ t2 [v  $ k [e ]] }>)).
+    (∀ (e' : tm' ∅), <| t'[e'] |> = <| t2'[v' $ k'[e']] |>) /\
+    (∀ (e  : tm  ∅), <{ t [e ] }> = <{ t2 [v  $ k [e ]] }>)).
 Proof.
   induction t'; intros. inversion H; clear H; subst; auto.
   right.
@@ -660,19 +660,19 @@ Proof.
   intros. cbn. rewrite Hplug; auto.
 Qed.
 
-Lemma k_inv_inner : ∀ (k' : K' ␀) (k : K ␀),
+Lemma k_inv_inner : ∀ (k' : K' ∅) (k : K ∅),
   k' ~ₖ k →
   (k' = K_nil' /\ k = K_nil) \/
-  (∃ (k2' : K' ␀) (k2 : K ␀) (j2' : J' ␀) (j2 : J ␀),
+  (∃ (k2' : K' ∅) (k2 : K ∅) (j2' : J' ∅) (j2 : J ∅),
     k2' ~ₖ k2 /\
     j2' ~ⱼ j2 /\
-    (∀ (e' : tm' ␀), <| k'[e'] |> = <| k2'[let e' in ↑j2'[0]] |>) /\
-    (∀ (e  : tm  ␀), <{ k [e ] }> = <{ k2 [ j2[e]] }>)) \/
-  (∃ (k2' : K' ␀) (k2 : K ␀) (e2' : tm' ^␀) (e2 : tm ^␀),
+    (∀ (e' : tm' ∅), <| k'[e'] |> = <| k2'[let e' in ↑j2'[0]] |>) /\
+    (∀ (e  : tm  ∅), <{ k [e ] }> = <{ k2 [ j2[e]] }>)) \/
+  (∃ (k2' : K' ∅) (k2 : K ∅) (e2' : tm' ^∅) (e2 : tm ^∅),
     k2' ~ₖ k2 /\
     e2' ~ₑ e2 /\
-    (∀ (e' : tm' ␀), <| k'[e'] |> = <| k2'[let e' in e2'] |>) /\
-    (∀ (e  : tm  ␀), <{ k [e ] }> = <{ k2 [(λ e2) e] }>)).
+    (∀ (e' : tm' ∅), <| k'[e'] |> = <| k2'[let e' in e2'] |>) /\
+    (∀ (e  : tm  ∅), <{ k [e ] }> = <{ k2 [(λ e2) e] }>)).
 Proof with auto.
   induction k'; intros; inversion H; clear H; subst; cbn; auto;
   destruct (IHk' _ H4) as
@@ -1011,19 +1011,19 @@ Proof.
 Qed.
 (* Print Assumptions let_multi_to_dollar_multi. *)
 
-Theorem let_multi_to_dollar_multi_val : ∀ e' (v' : val' ␀) e,
+Theorem let_multi_to_dollar_multi_val : ∀ e' (v' : val' ∅) e,
   e' -->'* v' →
   e' ~ e →
-  ∃ (v : val ␀), e -->* v /\ v' ~ᵥ v.
+  ∃ (v : val ∅), e -->* v /\ v' ~ᵥ v.
 Proof.
   intros e' v' e Hmulti Hsim.
   destruct (let_multi_to_dollar_multi e' v' e Hmulti Hsim) as [v [Hmulti' Hsim']].
   reason; eauto.
 Qed.
 
-Theorem let_to_dollar_equivalent_steps : ∀ e' (v' : val' ␀),
+Theorem let_to_dollar_equivalent_steps : ∀ e' (v' : val' ∅),
   e' -->'* v' →
-  ∃ (v : val ␀), let_to_dollar e' -->* v /\ v' ~ᵥ v.
+  ∃ (v : val ∅), let_to_dollar e' -->* v /\ v' ~ᵥ v.
 Proof.
   intros.
   apply (let_multi_to_dollar_multi_val e' v' (let_to_dollar e') H).

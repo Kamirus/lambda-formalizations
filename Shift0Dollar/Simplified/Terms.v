@@ -270,7 +270,7 @@ Notation "E [ e ]" := (plug E e)
   rewrite tm_dec_of_val in * +
   rewrite tm_dec_of_non in * +
   match goal with
-  | H : ␀ |- _ => destruct H
+  | H : ∅ |- _ => destruct H
   | H : (_, _) = (_, _) |- _ => inj H
   | H : tm_val _ = tm_val _ |- _ => apply inj_val in H; rewrite H in *
   | H : non_to_tm _ = non_to_tm _ |- _ => apply inj_non in H; rewrite H in *
@@ -311,58 +311,6 @@ Inductive dec {T R A} :=
 | dec_redex : K A → T A → R A → dec (* K [T [Redex]] *)
 .
 Arguments dec T R A : clear implicits.
-
-(* Definition redex_to_term {A} (r : redex A) := 
-  match r with
-  | redex_beta   e v => <{ (λ e) v }>
-  | redex_dollar v1 v2 => <{ v1 $ v2 }>
-  | redex_shift  v  v => <{ v  $ S₀ v }>
-  | redex_dol_let v v1 e2 => <{ v $ let S₀ v1 in e2 }>
-  | redex_let j p  => <{ j[p] }>
-  | redex_let_beta v e => <{ let v in e }>
-  | redex_let_assoc v1 e2 e3 => <{ let (let S₀ v1 in e2) in e3 }>
-  end.
-Coercion redex_to_term : redex >-> tm. *)
-
-(* ANCHOR Decompose
- *)
-(* Fixpoint decompose (e : tm ␀) : dec ␀ :=
-  match e with
-  | <{ var a }> => from_void a
-  | <{ S₀    }> => dec_value val_s_0
-  | <{ λ  e }> => dec_value (val_abs e)
-  | <{ e1 e2 }> =>
-    match tm_dec e1 with
-    | inr p1 => dec_redex K_nil T_nil (redex_let (J_fun e2) p1)   (* p1 e2 *)
-    | inl v1 =>
-      match tm_dec e2 with
-      | inr p2 => dec_redex K_nil T_nil (redex_let (J_arg v1) p2) (* v1 p2 *)
-      | inl v2 =>
-        match v1 with
-        | val_abs t => dec_redex K_nil T_nil (redex_beta t v2)    (* (λ t) v2 *)
-        | val_s_0 => dec_stuck_s_0 v2                                (* S₀ v2 *)
-        end
-      end
-    end
-  | <{ e1 $ e2 }> =>
-    match tm_dec e1 with
-    | inr p1 => dec_redex K_nil T_nil (redex_let (J_dol e2) p1) (* p1 $ e2 *)
-    | inl v1 => (* v1 $ e *)
-      match decompose e2 with
-      | dec_stuck_s_0 v2       => dec_redex K_nil (T_nil)         (redex_shift v1 v2)         (* v1 $ S₀ v2 *)
-      | dec_stuck_let v2_1 e2_2 => dec_redex K_nil (T_nil)         (redex_dol_let v1 v2_1 e2_2) (* v1 $ let x = S₀ v2_1 in e2_2 *)
-      | dec_redex k t r         => dec_redex K_nil (T_cons v1 k t) (r)                           (* v1 $ K[T[r]] *)
-      | dec_value v2            => dec_redex K_nil (T_nil)         (redex_dollar v1 v2)         (* v1 $ v2 *)
-      end
-    end
-  | <{ let e1 in e2 }> =>
-    match decompose e1 with
-    | dec_stuck_s_0 v1       => dec_stuck_let v1 e2                                           (* let x = S₀ v1 in e2 *)
-    | dec_stuck_let v1_1 e1_2 => dec_redex (K_nil)      T_nil (redex_let_assoc v1_1 e1_2 e2) (* let x = (let y = S₀ v1_1 in e1_2) in e2 *)
-    | dec_redex k t r         => dec_redex (K_let k e2) t      (r)                             (* let x = K[T[r]] in e2 *)
-    | dec_value v1            => dec_redex (K_nil)      T_nil (redex_let_beta v1 e2)         (* let x = v1 in e2 *)
-    end
-  end. *)
 
 
 (* Ltac inv_decompose_match H :=
@@ -426,17 +374,17 @@ Qed. *)
 Proof.
   intros; destruct v; auto.
 Qed.
-Lemma decompose_plug_stuck_s_0 : ∀ (v : val ␀), 
+Lemma decompose_plug_stuck_s_0 : ∀ (v : val ∅), 
   decompose <{ S₀ v }> = dec_stuck_s_0 v.
 Proof.
   intros; destruct v; cbn; auto.
 Qed.
-Lemma decompose_plug_stuck_let : ∀ (v : val ␀) e,
+Lemma decompose_plug_stuck_let : ∀ (v : val ∅) e,
   decompose <{ let S₀ v in e }> = dec_stuck_let v e.
 Proof.
   intros; destruct v; cbn; auto.
 Qed.
-Lemma decompose_plug_redex : ∀ k t (r : redex ␀),
+Lemma decompose_plug_redex : ∀ k t (r : redex ∅),
   decompose <{ k[t[r]] }> = dec_redex k t r.
 Proof with cbn; auto.
   intros k t; generalize dependent k; induction t; intros...
@@ -516,7 +464,7 @@ Qed. *)
 
 (* ANCHOR Evaluation
  *)
-(* Definition contract (r : redex ␀) : tm ␀ :=
+(* Definition contract (r : redex ∅) : tm ∅ :=
   match r with
   (* (λ x. e) v  ~>  e [x := v] *)
   | redex_beta e v => <{ e [0 := v] }>
@@ -541,7 +489,7 @@ Qed. *)
   end. *)
 
 
-(* Lemma plug_non_is_non : ∀ (k : K ␀) (t : T ␀) (p : non ␀),
+(* Lemma plug_non_is_non : ∀ (k : K ∅) (t : T ∅) (p : non ∅),
   ∃ p, <{ k [t [p]] }> = non_to_tm p.
 Proof.
   intros; destruct k; cbn in *.
@@ -574,7 +522,7 @@ Proof.
   apply plug_non_is_non.
 Qed.
 
-Lemma non_when_steps_to_non : ∀ e (p : non ␀),
+Lemma non_when_steps_to_non : ∀ e (p : non ∅),
   e -->* p →
   ∃ p, e = non_to_tm p.
 Proof.
@@ -583,7 +531,7 @@ Proof.
   apply (non_when_step x p); auto.
 Qed.
 
-Lemma non_when_steps_to_plug_non : ∀ e (k : K ␀) (t : T ␀) (p : non ␀),
+Lemma non_when_steps_to_plug_non : ∀ e (k : K ∅) (t : T ∅) (p : non ∅),
   e -->* <{ k [t [p]] }> →
   ∃ p, e = non_to_tm p.
 Proof.
@@ -613,7 +561,7 @@ Proof.
   apply H.
 Qed. *)
 
-(* Lemma step_delim : ∀ {v : val ␀} {e1 e2},
+(* Lemma step_delim : ∀ {v : val ∅} {e1 e2},
   e1 --> e2 →
   <{ v $ e1 }> --> <{ v $ e2 }>.
 Proof.
@@ -623,7 +571,7 @@ Proof.
   apply H.
 Qed.
 
-Lemma multi_delim : ∀ {v : val ␀} {e1 e2},
+Lemma multi_delim : ∀ {v : val ∅} {e1 e2},
   e1 -->* e2 →
   <{ v $ e1 }> -->* <{ v $ e2 }>.
 Proof.
@@ -634,7 +582,7 @@ Proof.
   apply H.
 Qed. *)
 
-(* Lemma step_k : ∀ {e1 e2} {k : K ␀},
+(* Lemma step_k : ∀ {e1 e2} {k : K ∅},
   e1 --> e2 →
   <{ k[e1] }> --> <{ k[e2] }>.
 Proof.
@@ -643,7 +591,7 @@ Proof.
   cbn. apply step_let. apply IHk. apply H.
 Qed.
 
-Lemma multi_k : ∀ {e1 e2} {k : K ␀},
+Lemma multi_k : ∀ {e1 e2} {k : K ∅},
   e1 -->* e2 →
   <{ k[e1] }> -->* <{ k[e2] }>.
 Proof.
@@ -654,7 +602,7 @@ Proof.
   apply H.
 Qed. *)
 
-(* Lemma step_t : ∀ {e1 e2} {t : T ␀},
+(* Lemma step_t : ∀ {e1 e2} {t : T ∅},
   e1 --> e2 →
   <{ t[e1] }> --> <{ t[e2] }>.
 Proof.
@@ -663,7 +611,7 @@ Proof.
   cbn. apply step_delim. apply step_k. apply IHt. apply H.
 Qed.
 
-Lemma multi_t : ∀ {e1 e2} {t : T ␀},
+Lemma multi_t : ∀ {e1 e2} {t : T ∅},
   e1 -->* e2 →
   <{ t[e1] }> -->* <{ t[e2] }>.
 Proof.
@@ -835,7 +783,7 @@ Qed. *)
 
 (* ANCHOR Context Capture
  *)
-(* Theorem plug_k_let_reassoc_s_0 : ∀ (k : K ␀) e1 e2,
+(* Theorem plug_k_let_reassoc_s_0 : ∀ (k : K ∅) e1 e2,
   <{ k [let S₀, e1 in e2] }> -->* <{ let S₀, e1 in ↑k[e2] }>.
 Proof.
   induction k; intros; cbn; auto.
@@ -843,7 +791,7 @@ Proof.
   rewrite lambda_to_val. apply multi_contr. apply contr_let_assoc.
 Qed.
 
-Theorem plug_k_let_reassoc_s_0 : ∀ (k : K ␀) (v : val ␀) e,
+Theorem plug_k_let_reassoc_s_0 : ∀ (k : K ∅) (v : val ∅) e,
   <{ k [let S₀ v in e] }> -->* <{ let S₀ v in ↑k[e] }>.
 Proof.
   induction k; intros; cbn; auto.
@@ -852,7 +800,7 @@ Proof.
 Qed.
 
 
-Lemma plug_k_let_let_S0_step_inv : ∀ (k : K ␀) (v : val ␀) e1 e2 term,
+Lemma plug_k_let_let_S0_step_inv : ∀ (k : K ∅) (v : val ∅) e1 e2 term,
   <{ k [let let S₀ v in e1 in e2] }> --> term →
   term = <{ k [let S₀ v in let e1 in {map (option_map Some) e2}] }>.
 Proof.
@@ -862,7 +810,7 @@ Proof.
   subst. reflexivity.
 Qed.
 
-Lemma S0_val_does_not_step : ∀ (v : val ␀) term,
+Lemma S0_val_does_not_step : ∀ (v : val ∅) term,
   <{ S₀ v }> --> term → False.
 Proof.
   intros.
@@ -878,7 +826,7 @@ Proof.
   - inversion H0. 
 Qed.
 
-Lemma let_S0_does_not_step : ∀ (v : val ␀) e term,
+Lemma let_S0_does_not_step : ∀ (v : val ∅) e term,
   <{ let S₀ v in e }> --> term → False.
 Proof.
   intros. inversion H; clear H; subst.
@@ -893,7 +841,7 @@ Proof.
     eapply S0_val_does_not_step. rewrite <- H2. constructor; eassumption.
 Qed.
 
-Lemma plug_step_inv : ∀ (k : K ␀) (t : T ␀) (r : redex ␀) term,
+Lemma plug_step_inv : ∀ (k : K ∅) (t : T ∅) (r : redex ∅) term,
   <{ k [t [r]] }> --> term →
   term = <{ k [t [{contract r}]] }>.
 Proof.
@@ -903,7 +851,7 @@ Proof.
   repeat rewrite decompose_plug_redex in *. inversion H; clear H; subst. reflexivity.
 Qed.
 
-Lemma inner_step_inv : ∀ (k : K ␀) (t : T ␀) e term inner,
+Lemma inner_step_inv : ∀ (k : K ∅) (t : T ∅) e term inner,
   <{ k [t [e]] }> --> term →
   e --> inner →
   term = <{ k [t [inner]] }>.
@@ -912,19 +860,19 @@ Proof.
   eapply deterministic_step; eauto.
 Qed.
 
-Lemma fold_redex_dol_let : ∀ (w v : val ␀) e,
+Lemma fold_redex_dol_let : ∀ (w v : val ∅) e,
   <{ w $ let S₀ v in e }> = redex_dol_let w v e.
 Proof.
   reflexivity.
 Qed.
 
-Lemma fold_redex_shift : ∀ (w v : val ␀),
+Lemma fold_redex_shift : ∀ (w v : val ∅),
   <{ w $ S₀ v }> = redex_shift w v.
 Proof.
   intros. auto.
 Qed.
 
-Lemma plug_shift_step_inv : ∀ (k0 : K ␀) (t0 : T ␀) (w : val ␀) (k : K ␀) (v : val ␀) e term,
+Lemma plug_shift_step_inv : ∀ (k0 : K ∅) (t0 : T ∅) (w : val ∅) (k : K ∅) (v : val ∅) e term,
   <{ k0 [t0 [w $ k [let S₀ v in e]]] }> --> term → ∃ inner,
   term = <{ k0 [t0 [inner]] }> /\
   <{ w $ k [let S₀ v in e] }> --> inner.
@@ -942,7 +890,7 @@ Proof.
     + assumption. 
 Qed.
 
-Lemma shift_step_inv : ∀ (w : val ␀) (k : K ␀) (v : val ␀) e term,
+Lemma shift_step_inv : ∀ (w : val ∅) (k : K ∅) (v : val ∅) e term,
   <{ w $ k [let S₀ v in e] }> --> term → 
   (k = K_nil /\ term = contract (redex_dol_let w v e)) \/
   (∃ inner, <{ k [let S₀ v in e] }> --> inner /\ term = <{ w $ inner }>).

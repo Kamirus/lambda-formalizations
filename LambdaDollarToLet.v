@@ -171,9 +171,9 @@ Proof.
 Qed.
 
 (* k[p] ~ e' -->'* k'[p'] *)
-Lemma plug_k_steps_to_similar_k' : ∀ (k : K ␀) (p : non ␀) term',
+Lemma plug_k_steps_to_similar_k' : ∀ (k : K ∅) (p : non ∅) term',
   <{ k [p] }> ~ₑ term' →
-  ∃ (k' : K' ␀) (p' : non' ␀),
+  ∃ (k' : K' ∅) (p' : non' ∅),
     term' -->'* <| k'[ p'] |> /\
     k ~ₖ k' /\
     p ~ₚ p'.
@@ -206,9 +206,9 @@ Proof with auto.
       + inversion He...
 Qed.
 
-Lemma plug_t_steps_to_similar_t' : ∀ (t : T ␀) (p : non ␀) term',
+Lemma plug_t_steps_to_similar_t' : ∀ (t : T ∅) (p : non ∅) term',
   <{ t [p] }> ~ₑ term' →
-  ∃ (t' : T' ␀) (p' : non' ␀),
+  ∃ (t' : T' ∅) (p' : non' ∅),
     term' -->'* <| t'[ p'] |> /\
     t ~ₜ t' /\
     p ~ₚ p'.
@@ -245,9 +245,9 @@ Proof.
       inversion Hp2; clear Hp2; subst. auto.
 Qed.
 
-Lemma plug_kt_steps_to_similar_kt' : ∀ (k : K ␀) (t : T ␀) (p : non ␀) term',
+Lemma plug_kt_steps_to_similar_kt' : ∀ (k : K ∅) (t : T ∅) (p : non ∅) term',
   <{ k [t [p]] }> ~ₑ term' →
-  ∃ (k' : K' ␀) (t' : T' ␀) (p' : non' ␀),
+  ∃ (k' : K' ∅) (t' : T' ∅) (p' : non' ∅),
     term' -->'* <| k'[ t' [p']] |> /\
     k ~ₖ k' /\
     t ~ₜ t' /\
@@ -443,7 +443,7 @@ Proof with auto.
 Qed.
 Global Hint Resolve sim_lift_k : core.
 
-Lemma sim_subst_lemma : ∀ e e' v (v' : val' ␀),
+Lemma sim_subst_lemma : ∀ e e' v (v' : val' ∅),
   e ~ₑ e' →
   v ~ᵥ v' →
   <{ e [0 := v] }> ~ₑ <| e' [0 := v'] |>.
@@ -475,14 +475,14 @@ Ltac laws := repeat(
       rewrite bind_var_subst_lift'
   end).
 
-Lemma k_inv_inner' : ∀ (k : K ␀) (k' : K' ␀),
+Lemma k_inv_inner' : ∀ (k : K ∅) (k' : K' ∅),
   k ~ₖ k' →
   (k = K_nil /\ k' = K_nil') \/
-  (∃ (k2 : K ␀) (k2' : K' ␀) (j2 : J ␀) (j2' : J' ␀),
+  (∃ (k2 : K ∅) (k2' : K' ∅) (j2 : J ∅) (j2' : J' ∅),
     k2 ~ₖ k2' /\
     j2 ~ⱼ j2' /\
-    (∀ (e  : tm ^␀), <{ ↑k[e ] }> = <{ ↑k2[↑j2[e ]] }>) /\
-    (∀ (e' : tm' ␀), <| k'[e'] |> = <| k2'[let e' in ↑j2'[0]] |>)).
+    (∀ (e  : tm ^∅), <{ ↑k[e ] }> = <{ ↑k2[↑j2[e ]] }>) /\
+    (∀ (e' : tm' ∅), <| k'[e'] |> = <| k2'[let e' in ↑j2'[0]] |>)).
 Proof with auto.
   induction k; intros; inversion H; clear H; subst; cbn; auto.
   destruct (IHk _ H4) as [[Hk Hk'] | [k2 [k2' [j2 [j2' [Hk2 [Hj2 [Hke Hke']]]]]]]]; subst; right.
@@ -492,7 +492,7 @@ Proof with auto.
     + rewrite Hke' in *. reflexivity.
 Qed.
 
-Lemma sim_redex_beta : ∀ e (v : val ␀) ev' v',
+Lemma sim_redex_beta : ∀ e (v : val ∅) ev' v',
   <{ λ e }> ~ₑ ev' →
   v ~ᵥ v' → ∃ term',
     <| ev' v' |> -->'* term' /\ 
@@ -624,19 +624,19 @@ Proof.
 Qed.
 (* Print Assumptions dollar_multi_to_let_multi. *)
 
-Theorem dollar_multi_to_let_multi_val : ∀ e (v : val ␀) e',
+Theorem dollar_multi_to_let_multi_val : ∀ e (v : val ∅) e',
   e -->* v →
   e ~ₑ e' →
-  ∃ (v' : val' ␀), e' -->'* v' /\ v ~ᵥ v'.
+  ∃ (v' : val' ∅), e' -->'* v' /\ v ~ᵥ v'.
 Proof.
   intros e v e' Hmulti Hsim.
   destruct (dollar_multi_to_let_multi e v e' Hmulti Hsim) as [v' [Hmulti' Hsim']].
   reason; eauto.
 Qed.
 
-Theorem dollar_to_let_equivalent_steps : ∀ e (v : val ␀),
+Theorem dollar_to_let_equivalent_steps : ∀ e (v : val ∅),
   e -->* v →
-  ∃ (v' : val' ␀), dollar_to_let e -->'* v' /\ v ~ᵥ v'.
+  ∃ (v' : val' ∅), dollar_to_let e -->'* v' /\ v ~ᵥ v'.
 Proof.
   intros.
   apply (dollar_multi_to_let_multi_val e v (dollar_to_let e) H).
