@@ -271,6 +271,19 @@ Proof.
   try solve [f_equal; apply IHe1 + apply IHe2].
 Qed.
 
+Lemma bind_bind_law : ∀ {A B C} (g : B → tm C) (f : A → tm B) (e : tm A),
+  bind g (bind f e) = bind (λ a, bind g (f a)) e.
+Proof.
+  intros. generalize dependent B. generalize dependent C.
+  induction e; intros; cbn; auto;
+  try solve [rewrite IHe1; rewrite IHe2; reflexivity].
+  - rewrite IHe; repeat f_equal.
+    apply functional_extensionality; intros [a|]; auto.
+    rewrite bind_map_law. rewrite <- map_bind_law. reflexivity.
+  - rewrite IHe; repeat f_equal.
+    apply functional_extensionality; intros [a|]; auto.
+    rewrite bind_map_law. rewrite <- map_bind_law. reflexivity.
+Qed.
 
 Definition var_subst {V} e' (v:^V) :=
   match v with

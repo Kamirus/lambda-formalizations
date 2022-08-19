@@ -314,6 +314,20 @@ Proof.
   change ((map' g ∘ f) a) with (map' g (f a)); repeat rewrite map_map_law'; f_equal.
 Qed.
 
+Lemma bind_bind_law' : ∀ {A B C} (g : B → tm' C) (f : A → tm' B) (e : tm' A),
+  bind' g (bind' f e) = bind' (λ a, bind' g (f a)) e.
+Proof.
+  intros. generalize dependent B. generalize dependent C.
+  induction e; intros; cbn; auto;
+  try solve [rewrite IHe1; rewrite IHe2; reflexivity].
+  - rewrite IHe; repeat f_equal.
+    apply functional_extensionality; intros [a|]; auto.
+    rewrite bind_map_law'. rewrite <- map_bind_law'. reflexivity.
+  - rewrite IHe1. rewrite IHe2. repeat f_equal.
+    apply functional_extensionality; intros [a|]; auto.
+    rewrite bind_map_law'. rewrite <- map_bind_law'. reflexivity.
+Qed.
+
 Lemma map_as_bind' : ∀ {A B} e (f : A → B),
   map' f e = bind' (tm_var' ∘ f) e.
 Proof.
