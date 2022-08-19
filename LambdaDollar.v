@@ -124,7 +124,7 @@ Proof.
 Qed.
 
 
-Fixpoint map {A B : Type} (f : A -> B) (e : tm A) : tm B :=
+Fixpoint map {A B : Type} (f : A → B) (e : tm A) : tm B :=
   match e with
   | <{ var a }> => <{ var {f a} }>
   | <{ λ  e' }> => <{ λ  {map (option_map f) e'} }>
@@ -138,7 +138,7 @@ Definition mapV {A B} (f : A → B) (v : val A) : val B :=
   | val_abs e => val_abs (map (option_map f) e)
   end.
 
-Definition mapP {A B : Type} (f : A -> B) (p : non A) : non B :=
+Definition mapP {A B : Type} (f : A → B) (p : non A) : non B :=
   match p with
   | non_app e1 e2 => non_app (map f e1) (map f e2)
   | non_dol e1 e2 => non_dol (map f e1) (map f e2)
@@ -163,7 +163,14 @@ Proof.
   intros. destruct p; auto.
 Qed.
 
-Lemma map_map_law : forall A e B C (f:A->B) (g:B->C),
+Lemma map_id_law : ∀ A (e : tm A),
+  map id e = e.
+Proof.
+  induction e; cbn; auto;
+  repeat rewrite option_map_id_law; f_equal; auto.
+Qed.
+
+Lemma map_map_law : ∀ A e B C (f : A → B) (g : B → C),
   map g (map f e) = map (g ∘ f) e.
 Proof.
   intros. generalize dependent B. generalize dependent C.
@@ -172,7 +179,7 @@ Proof.
   try solve [rewrite IHe1; rewrite IHe2; reflexivity].
 Qed.
 
-Lemma mapV_mapV_law : forall A v B C (f : A → B) (g : B → C),
+Lemma mapV_mapV_law : ∀ A v B C (f : A → B) (g : B → C),
   mapV g (mapV f v) = mapV (g ∘ f) v.
 Proof.
   destruct v; intros; cbn; auto.
@@ -181,7 +188,7 @@ Proof.
 Qed.
 
 
-Fixpoint bind {A B : Type} (f : A -> tm B) (e : tm A) : tm B :=
+Fixpoint bind {A B : Type} (f : A → tm B) (e : tm A) : tm B :=
   match e with
   | <{ var a }> => f a
   | <{ e1   e2 }> => <{ {bind f e1}   {bind f e2} }>
@@ -207,7 +214,7 @@ Definition bindV {A B} (f : A → tm B) (v : val A) : val B :=
       end) e)
   end.
 
-Definition bindP {A B : Type} (f : A -> tm B) (p : non A) : non B :=
+Definition bindP {A B : Type} (f : A → tm B) (p : non A) : non B :=
   match p with
   | non_app e1 e2 => non_app (bind f e1) (bind f e2)
   | non_dol e1 e2 => non_dol (bind f e1) (bind f e2)
@@ -399,8 +406,8 @@ Ltac inv_decompose_match H :=
 (* ANCHOR Unique Decomposition
  *)
 (* plug ∘ decompose = id *)
-Lemma decompose_value_inversion : ∀ e v,
-  decompose e = dec_value v → e = val_to_tm v.
+Lemma decompose_value_inversion : ∀ e (v : val ∅),
+  decompose e = dec_value v → e = v.
 Proof.
   dependent inversion e; intros; cbn in *.
   inversion v.
@@ -443,8 +450,8 @@ Proof.
   Qed.
 
 (* decompose ∘ plug = id *)
-Lemma decompose_plug_value : ∀ v,
-  decompose (val_to_tm v) = dec_value v.
+Lemma decompose_plug_value : ∀ (v : val ∅),
+  decompose v = dec_value v.
 Proof.
   intros; destruct v; auto.
   Qed.
@@ -490,7 +497,7 @@ Definition mapJ {A B} (f : A → B) (j : J A) : J B :=
   | J_dol e => J_dol (map f e)
   end.
 
-Lemma mapJ_mapJ_law : forall A j B C (f : A → B) (g : B → C),
+Lemma mapJ_mapJ_law : ∀ A j B C (f : A → B) (g : B → C),
   mapJ g (mapJ f j) = mapJ (g ∘ f) j.
 Proof.
   destruct j; intros; cbn;
@@ -505,7 +512,7 @@ Fixpoint mapK {A B} (f : A → B) (k : K A) : K B :=
   | K_cons j1 k2 => K_cons (mapJ f j1) (mapK f k2)
   end.
 
-Lemma mapK_mapK_law : forall A k B C (f : A → B) (g : B → C),
+Lemma mapK_mapK_law : ∀ A k B C (f : A → B) (g : B → C),
   mapK g (mapK f k) = mapK (g ∘ f) k.
 Proof.
   induction k; intros; cbn; auto.
