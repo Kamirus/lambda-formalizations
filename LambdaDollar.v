@@ -285,6 +285,12 @@ Proof.
     rewrite bind_map_law. rewrite <- map_bind_law. reflexivity.
 Qed.
 
+Lemma bind_trivial_identity : ∀ {A B} (f : A → tm B) (a : A),
+  bind f <{ var a }> = f a.
+Proof.
+  auto.
+Qed.
+
 Definition var_subst {V} e' (v:^V) :=
   match v with
   | None => e'
